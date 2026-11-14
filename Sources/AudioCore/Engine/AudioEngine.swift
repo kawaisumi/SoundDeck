@@ -36,7 +36,8 @@ public final class AudioEngine: ObservableObject {
     private var stalledTicks = 0
     private static let watchdogInterval: TimeInterval = 0.25
     /// 管線回報啟動成功後，IOProc 連續這麼久沒被呼叫就視為沒有真的在運作。
-    private static let stallTimeout: TimeInterval = 3
+    private static let stallTimeout: TimeInterval = 20
+    private static let permissionRetryInterval: TimeInterval = 5
     private var deviceListenerInstalled = false
 
     public init() {}
@@ -222,9 +223,22 @@ public final class AudioEngine: ObservableObject {
         }
         stalledTicks += 1
         if Double(stalledTicks) * Self.watchdogInterval >= Self.stallTimeout {
-            Log.error("管線已啟動但音訊沒有流動，已停用音訊處理")
-            disable(because: "音訊處理已啟動，但系統沒有送出任何音訊。通常是因為還沒有允許「系統音訊錄製」權限。允許後請重新開啟開關。")
+            waitForAudioPermission()
         }
+    }
+
+    /// 音訊沒有流動時（多半是授權視窗還沒被回答）：先拆掉管線並說明原因，
+    /// 然後每隔幾秒再試一次，使用者允許後就會自動開始，不必再手動開關。
+    private func waitForAudioPermission() {
+        Log.error("管線已啟動但音訊沒有流動，稍後重試")
+        lastCallbackCount = nil
+        stalledTicks = 0
+
+        generation += 1
+        let generation = self.generation
+        workQueue.async { [weak self] in self?.takePipeline()?.stop() }
+        status = .failed("系統沒有送出任何音訊，通常是因為還沒有允許「系統音訊錄製」權限。允許後會自動開始。")
+        perform(generation: generation, attempt: 0, after: Self.permissionRetryInterval, failure: nil)
     }
 
     private func disable(because reason: String) {
