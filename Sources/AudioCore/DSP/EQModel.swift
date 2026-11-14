@@ -109,10 +109,16 @@ public struct EQSettings: Codable, Equatable, Sendable {
 }
 
 /// 內建與自訂的 EQ 預設組。
-public struct EQPreset: Identifiable, Equatable, Sendable {
+public struct EQPreset: Identifiable, Equatable, Codable, Sendable {
     public let id: String
     public let name: String
     public let bands: [EQBand]
+
+    public init(id: String, name: String, bands: [EQBand]) {
+        self.id = id
+        self.name = name
+        self.bands = bands
+    }
 
     public static let builtIn: [EQPreset] = [
         EQPreset(id: "flat", name: "平坦", bands: EQSettings.flat.bands),
@@ -136,6 +142,17 @@ public struct EQPreset: Identifiable, Equatable, Sendable {
             EQBand(kind: .peak, frequency: 1000),
             EQBand(kind: .peak, frequency: 3000, gainDB: 4, q: 1),
             EQBand(kind: .highShelf, frequency: 10_000, gainDB: 1.5, q: 0.71),
+        ]),
+        // 女聲主唱的樂團與流行歌：鼓的輪廓清楚、人聲飽滿。
+        // 針對內建小口徑重低音的 soundbar（頻率響應下限約 50–60 Hz）調整，
+        // 依常見的單體配置推算，沒有用實測曲線校正。
+        EQPreset(id: "band", name: "樂團", bands: [
+            EQBand(kind: .highPass, frequency: 40, q: 0.71),             // 喇叭發不出來的超低頻不要送，省下餘裕
+            EQBand(kind: .peak, frequency: 90, gainDB: 3, q: 1),         // 大鼓的力道，落在小重低音發得出來的範圍
+            EQBand(kind: .peak, frequency: 250, gainDB: -1, q: 1.4),     // 稍微減少混濁，讓鼓和貝斯分得開
+            EQBand(kind: .peak, frequency: 450, gainDB: 2, q: 0.9),      // 人聲的厚度，小單體在這一段偏薄
+            EQBand(kind: .peak, frequency: 3000, gainDB: 1.5, q: 1),     // 人聲的清晰度、小鼓的擊點
+            EQBand(kind: .highShelf, frequency: 9000, gainDB: 2, q: 0.71), // 銅鈸與腳踏鈸的空氣感
         ]),
         EQPreset(id: "loudness", name: "小音量補償", bands: [
             EQBand(kind: .lowShelf, frequency: 120, gainDB: 5, q: 0.71),

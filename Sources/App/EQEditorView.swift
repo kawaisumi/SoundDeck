@@ -61,7 +61,7 @@ struct EQEditorView: View {
             .frame(width: 250)
             .help("每個輸出裝置各自記住一組等化器設定。")
 
-            EQPresetMenu()
+            EQPresetMenu(allowsManaging: true)
                 .frame(width: 150)
         }
     }
@@ -133,24 +133,149 @@ struct EQEditorView: View {
 
 struct EQPresetMenu: View {
     @EnvironmentObject private var equalizer: EqualizerController
+    /// 是否提供「儲存」與「刪除」。選單列的 Popover 裡只用來切換，管理放在編輯器視窗。
+    var allowsManaging = false
+
+    @State private var isNaming = false
+    @State private var isManaging = false
+    @State private var newName = ""
 
     var body: some View {
         Menu {
             ForEach(EQPreset.builtIn) { preset in
-                Button {
-                    equalizer.apply(preset)
-                } label: {
-                    if preset.id == equalizer.matchingPreset?.id {
-                        Label(preset.name, systemImage: "checkmark")
-                    } else {
-                        Text(preset.name)
-                    }
+                presetButton(preset)
+            }
+
+            if !equalizer.customPresets.isEmpty {
+                Divider()
+                ForEach(equalizer.customPresets) { preset in
+                    presetButton(preset)
                 }
+            }
+
+            if allowsManaging {
+                Divider()
+                Button("儲存為預設組…") {
+                    // 目前剛好是某個自訂預設組時帶入它的名稱，方便直接覆蓋。
+                    let current = equalizer.matchingPreset
+                    newName = equalizer.customPresets.contains { $0.id == current?.id } ? current?.name ?? "" : ""
+                    isNaming = true
+                }
+                Button("管理預設組…") {
+                    isManaging = true
+                }
+                .disabled(equalizer.customPresets.isEmpty)
             }
         } label: {
             Text(equalizer.matchingPreset?.name ?? "自訂")
         }
         .accessibilityLabel("預設組")
+        .sheet(isPresented: $isManaging) {
+            EQPresetManagerView()
+        }
+        .alert("儲存為預設組", isPresented: $isNaming) {
+            TextField("名稱", text: $newName)
+            Button("儲存") {
+                equalizer.saveCurrentAsPreset(named: newName)
+            }
+            .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("把目前的頻段設定存成一組預設，之後在任何輸出裝置上都可以套用。使用已存在的名稱會覆蓋那一組。")
+        }
+    }
+
+    private func presetButton(_ preset: EQPreset) -> some View {
+        Button {
+            equalizer.apply(preset)
+        } label: {
+            if preset.id == equalizer.matchingPreset?.id {
+                Label(preset.name, systemImage: "checkmark")
+            } else {
+                Text(preset.name)
+            }
+        }
+    }
+}
+
+/// 管理自訂預設組：一眼看到全部，直接改名、套用或刪除。
+private struct EQPresetManagerView: View {
+    @EnvironmentObject private var equalizer: EqualizerController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("自訂預設組")
+                .font(.headline)
+
+            if equalizer.customPresets.isEmpty {
+                Text("還沒有自訂的預設組。調好等化器後，從預設組選單選「儲存為預設組…」。")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(equalizer.customPresets) { preset in
+                        EQPresetManagerRow(preset: preset)
+                    }
+                }
+                Text("點名稱可以直接修改，按 Return 確認。")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                Spacer()
+                Button("完成") { dismiss() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(18)
+        .frame(width: 380)
+    }
+}
+
+private struct EQPresetManagerRow: View {
+    @EnvironmentObject private var equalizer: EqualizerController
+    let preset: EQPreset
+
+    @State private var name = ""
+    @FocusState private var isFocused: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField("名稱", text: $name)
+                .textFieldStyle(.roundedBorder)
+                .focused($isFocused)
+                .onSubmit(commit)
+                .onChange(of: isFocused) { _, focused in
+                    if !focused { commit() }
+                }
+                .onChange(of: preset.name, initial: true) { _, newValue in
+                    if !isFocused { name = newValue }
+                }
+                .accessibilityLabel("預設組名稱")
+
+            Button("套用") {
+                equalizer.apply(preset)
+            }
+            .disabled(equalizer.matchingPreset?.id == preset.id)
+
+            Button(role: .destructive) {
+                equalizer.deleteCustomPreset(preset.id)
+            } label: {
+                Image(systemName: "trash")
+            }
+            .help("刪除「\(preset.name)」")
+            .accessibilityLabel("刪除 \(preset.name)")
+        }
+    }
+
+    /// 改名失敗（空白或與別組重複）時，把欄位還原成原本的名稱。
+    private func commit() {
+        if !equalizer.renameCustomPreset(preset.id, to: name) {
+            name = preset.name
+        }
     }
 }
 

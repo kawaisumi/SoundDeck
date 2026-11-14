@@ -13,7 +13,11 @@ struct MenuView: View {
                 Toggle("啟用音訊處理", isOn: enabledBinding)
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .help("關閉後聲音會直接輸出，等化器、混音器與軟體音量都不作用。")
             }
+
+            // 正常運作時不佔版面；只有啟動中、已停用或出錯時才顯示。
+            statusBanner
 
             VolumeSection()
 
@@ -31,13 +35,7 @@ struct MenuView: View {
 
             Divider()
 
-            statusSection
-
-            Divider()
-
-            Button("結束 SoundDeck") {
-                NSApplication.shared.terminate(nil)
-            }
+            FooterSection()
         }
         .padding(14)
         .frame(width: 320)
@@ -51,8 +49,11 @@ struct MenuView: View {
     }
 
     @ViewBuilder
-    private var statusSection: some View {
+    private var statusBanner: some View {
         switch engine.status {
+        case .running:
+            EmptyView()
+
         case .stopped:
             Label("已停用，聲音直接輸出", systemImage: "pause.circle")
                 .font(.caption)
@@ -62,20 +63,6 @@ struct MenuView: View {
             Label("啟動中…", systemImage: "hourglass")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-
-        case .running(let info):
-            VStack(alignment: .leading, spacing: 6) {
-                // 只有 Popover 開著時這個 view 才存在，所以收起來時不會輪詢。
-                TimelineView(.periodic(from: .now, by: 0.1)) { _ in
-                    LevelMeter(peak: engine.readStats()?.inputPeak ?? 0)
-                }
-                Text(String(
-                    format: "%.1f kHz · 緩衝 %d frames（%.1f ms）",
-                    info.sampleRate / 1000, info.bufferFrames, info.bufferMilliseconds
-                ))
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
 
         case .failed(let message):
             VStack(alignment: .leading, spacing: 6) {
@@ -90,7 +77,44 @@ struct MenuView: View {
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            .padding(10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Color.orange.opacity(0.12)))
         }
+    }
+}
+
+// MARK: - 頁尾
+
+private struct FooterSection: View {
+    @StateObject private var loginItem = LoginItem()
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Toggle("開機時自動啟動", isOn: Binding(
+                    get: { loginItem.isEnabled },
+                    set: { loginItem.setEnabled($0) }
+                ))
+                .toggleStyle(.checkbox)
+                .font(.callout)
+
+                Spacer()
+
+                Button("結束") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .help("結束 SoundDeck，聲音會恢復成系統原本的輸出。")
+            }
+
+            if let message = loginItem.message {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .onAppear { loginItem.refresh() }
     }
 }
 
@@ -253,31 +277,5 @@ private struct DeviceRow: View {
         case .virtual: return "waveform"
         case .other: return "hifispeaker.fill"
         }
-    }
-}
-
-// MARK: - 電平表
-
-/// 簡單的峰值電平條，範圍 -60 dB 到 0 dB。
-private struct LevelMeter: View {
-    let peak: Float
-
-    private var fraction: Double {
-        guard peak > 0 else { return 0 }
-        let decibels = 20 * log10(Double(peak))
-        return min(max((decibels + 60) / 60, 0), 1)
-    }
-
-    var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(.quaternary)
-                Capsule()
-                    .fill(peak >= 1 ? Color.red : Color.green)
-                    .frame(width: geometry.size.width * fraction)
-            }
-        }
-        .frame(height: 5)
-        .accessibilityLabel("輸入電平")
     }
 }

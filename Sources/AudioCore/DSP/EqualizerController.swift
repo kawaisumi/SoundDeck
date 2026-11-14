@@ -10,6 +10,8 @@ public final class EqualizerController: ObservableObject {
     @Published public private(set) var settings: EQSettings
     /// 目前正在檢視／編輯的裝置 UID；nil 表示還沒有選定裝置，此時編輯的是共用設定。
     @Published public private(set) var deviceUID: String?
+    /// 使用者自己儲存的預設組，所有裝置共用。
+    @Published public private(set) var customPresets: [EQPreset] = []
 
     private let engine: AudioEngine
     private var byDevice: [String: EQSettings]
@@ -17,6 +19,7 @@ public final class EqualizerController: ObservableObject {
 
     private static let sharedKey = "equalizerSettings"
     private static let byDeviceKey = "equalizerSettingsByDevice"
+    private static let customPresetsKey = "equalizerCustomPresets"
 
     public init(engine: AudioEngine) {
         self.engine = engine
@@ -34,6 +37,10 @@ public final class EqualizerController: ObservableObject {
             byDevice = [:]
         }
         settings = shared
+        if let data = defaults.data(forKey: Self.customPresetsKey),
+           let saved = try? JSONDecoder().decode([EQPreset].self, from: data) {
+            customPresets = saved
+        }
 
         engine.setEqualizer(shared, forDeviceUID: nil)
         for (uid, deviceSettings) in byDevice {
@@ -53,9 +60,56 @@ public final class EqualizerController: ObservableObject {
         byDevice[deviceUID] != nil
     }
 
-    /// 目前的頻段若與某個內建預設組完全相同，回傳它。
+    /// 目前的頻段若與某個預設組完全相同，回傳它。自訂的優先於內建的。
     public var matchingPreset: EQPreset? {
-        EQPreset.builtIn.first { Self.sameShape($0.bands, settings.bands) }
+        (customPresets + EQPreset.builtIn).first { Self.sameShape($0.bands, settings.bands) }
+    }
+
+    // MARK: - 自訂預設組
+
+    /// 把目前的頻段存成一組自訂預設。名稱與現有的自訂預設組相同時會覆蓋它。
+    /// 名稱是空白時不做事並回傳 false。
+    @discardableResult
+    public func saveCurrentAsPreset(named rawName: String) -> Bool {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return false }
+        let existing = customPresets.firstIndex { $0.name == name }
+        let preset = EQPreset(
+            id: existing.map { customPresets[$0].id } ?? "custom-\(UUID().uuidString)",
+            name: name,
+            bands: settings.bands
+        )
+        if let existing {
+            customPresets[existing] = preset
+        } else {
+            customPresets.append(preset)
+        }
+        persistCustomPresets()
+        return true
+    }
+
+    /// 重新命名自訂預設組。名稱是空白，或已經被另一組使用時不做事並回傳 false。
+    @discardableResult
+    public func renameCustomPreset(_ id: EQPreset.ID, to rawName: String) -> Bool {
+        let name = rawName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty,
+              let index = customPresets.firstIndex(where: { $0.id == id }),
+              !customPresets.contains(where: { $0.id != id && $0.name == name })
+        else { return false }
+        customPresets[index] = EQPreset(id: id, name: name, bands: customPresets[index].bands)
+        persistCustomPresets()
+        return true
+    }
+
+    public func deleteCustomPreset(_ id: EQPreset.ID) {
+        customPresets.removeAll { $0.id == id }
+        persistCustomPresets()
+    }
+
+    private func persistCustomPresets() {
+        if let data = try? JSONEncoder().encode(customPresets) {
+            UserDefaults.standard.set(data, forKey: Self.customPresetsKey)
+        }
     }
 
     public var canAddBand: Bool { settings.bands.count < EQSettings.maxBands }
