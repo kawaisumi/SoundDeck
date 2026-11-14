@@ -4,6 +4,7 @@ import SwiftUI
 struct MenuView: View {
     @EnvironmentObject private var engine: AudioEngine
     @EnvironmentObject private var devices: DeviceManager
+    @State private var contentHeight: CGFloat = 0
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -39,6 +40,18 @@ struct MenuView: View {
         }
         .padding(14)
         .frame(width: 320)
+        // 內容一律取自己需要的高度，不被視窗目前的高度拉伸或壓縮；
+        // 量到的高度交給 PopoverWindowAnchor，由它把視窗調成一樣高並固定上緣。
+        .fixedSize(horizontal: false, vertical: true)
+        .background(
+            GeometryReader { geometry in
+                Color.clear
+                    .onChange(of: geometry.size.height, initial: true) { _, height in
+                        contentHeight = height
+                    }
+            }
+        )
+        .background(PopoverWindowAnchor(contentHeight: contentHeight))
     }
 
     private var enabledBinding: Binding<Bool> {
