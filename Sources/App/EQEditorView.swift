@@ -5,6 +5,7 @@ import SwiftUI
 /// 參數式 EQ 的編輯視窗：上方是可拖曳的頻率響應曲線，下方是各頻段的精確數值。
 struct EQEditorView: View {
     @EnvironmentObject private var engine: AudioEngine
+    @EnvironmentObject private var devices: DeviceManager
     @EnvironmentObject private var equalizer: EqualizerController
     @State private var selectedBand: EQBand.ID?
 
@@ -47,8 +48,21 @@ struct EQEditorView: View {
 
             Spacer()
 
+            // 每個輸出裝置各有一組 EQ。預設編輯目前的輸出裝置，也可以切去調其他裝置的。
+            Picker("裝置", selection: Binding(
+                get: { equalizer.deviceUID ?? "" },
+                set: { equalizer.select(deviceUID: $0.isEmpty ? nil : $0) }
+            )) {
+                ForEach(devices.devices) { device in
+                    Text(device.id == devices.currentDeviceID ? "\(device.name)（目前輸出）" : device.name)
+                        .tag(device.uid)
+                }
+            }
+            .frame(width: 250)
+            .help("每個輸出裝置各自記住一組等化器設定。")
+
             EQPresetMenu()
-                .frame(width: 170)
+                .frame(width: 150)
         }
     }
 

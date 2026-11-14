@@ -12,6 +12,8 @@ public struct MixerChannel: Identifiable, Equatable, Sendable {
     public var isMuted: Bool
     /// 這一刻是否正在發聲。
     public var isPlaying: Bool
+    /// 指定的輸出裝置 UID；nil 表示跟隨系統預設。「依 App 指定輸出裝置」關閉時仍會保留，只是不生效。
+    public var deviceUID: String?
     /// 對應的管線槽位，用來讀電平表。
     public let slot: Int
 }
@@ -23,6 +25,8 @@ public final class MixerController: ObservableObject {
     @Published public private(set) var channels: [MixerChannel] = []
     /// 「系統音效與其他」：所有沒有自己一列的聲音。
     @Published public private(set) var other: MixerChannel
+    /// 「依 App 指定輸出裝置」的總開關。關閉時所有 App 都走系統預設輸出，已指定的關係保留但不生效。
+    @Published public private(set) var isPerAppRoutingEnabled: Bool
 
     public static let volumeRange: ClosedRange<Float> = 0...2
     public static let otherID = "__other__"
@@ -33,7 +37,8 @@ public final class MixerController: ObservableObject {
     private struct Saved: Codable, Equatable {
         var volume: Float = 1
         var isMuted = false
-        var isDefault: Bool { volume == 1 && !isMuted }
+        var deviceUID: String?
+        var isDefault: Bool { volume == 1 && !isMuted && deviceUID == nil }
     }
 
     private let engine: AudioEngine
@@ -44,6 +49,7 @@ public final class MixerController: ObservableObject {
     private var lastPlayed: [String: Date] = [:]
     private var timer: Timer?
     private static let defaultsKey = "mixerSettings"
+    private static let routingEnabledKey = "perAppRoutingEnabled"
 
     public init(engine: AudioEngine) {
         self.engine = engine
@@ -53,10 +59,12 @@ public final class MixerController: ObservableObject {
         } else {
             saved = [:]
         }
+        isPerAppRoutingEnabled = UserDefaults.standard.bool(forKey: Self.routingEnabledKey)
         let otherSaved = saved[Self.otherID] ?? Saved()
         other = MixerChannel(
             id: Self.otherID, name: "系統音效與其他", bundleURL: nil,
-            volume: otherSaved.volume, isMuted: otherSaved.isMuted, isPlaying: false, slot: 0
+            volume: otherSaved.volume, isMuted: otherSaved.isMuted, isPlaying: false,
+            deviceUID: nil, slot: 0
         )
 
         // 有 App 開始或停止使用音訊時立刻更新；另外每秒檢查一次，處理播放狀態與保留時間。
@@ -78,6 +86,19 @@ public final class MixerController: ObservableObject {
 
     public func setMuted(_ muted: Bool, for id: String) {
         modify(id) { $0.isMuted = muted }
+    }
+
+    /// 指定某個 App 的輸出裝置；傳 nil 表示跟隨系統預設。
+    public func setDevice(_ deviceUID: String?, for id: String) {
+        guard id != Self.otherID else { return }
+        modify(id) { $0.deviceUID = deviceUID }
+    }
+
+    public func setPerAppRoutingEnabled(_ enabled: Bool) {
+        guard enabled != isPerAppRoutingEnabled else { return }
+        isPerAppRoutingEnabled = enabled
+        UserDefaults.standard.set(enabled, forKey: Self.routingEnabledKey)
+        refresh()
     }
 
     /// 各槽位的峰值，給電平表用。
@@ -138,6 +159,7 @@ public final class MixerController: ObservableObject {
             guard let app = appByID[id] else { continue }
             routing.processes[slot] = app.processes
             routing.gains[slot] = Self.gain(for: saved[id] ?? Saved())
+            routing.devices[slot] = isPerAppRoutingEnabled ? saved[id]?.deviceUID : nil
         }
         engine.setRouting(routing)
 
@@ -147,7 +169,8 @@ public final class MixerController: ObservableObject {
             let entry = saved[id] ?? Saved()
             return MixerChannel(
                 id: id, name: app.name, bundleURL: app.bundleURL,
-                volume: entry.volume, isMuted: entry.isMuted, isPlaying: app.isPlaying, slot: slot
+                volume: entry.volume, isMuted: entry.isMuted, isPlaying: app.isPlaying,
+                deviceUID: entry.deviceUID, slot: slot
             )
         }
         if newChannels != channels { channels = newChannels }

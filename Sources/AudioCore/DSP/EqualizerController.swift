@@ -2,21 +2,55 @@ import Combine
 import Foundation
 
 /// EQ 設定的唯一來源：UI 透過它修改，它負責存檔並送進音訊引擎。所有方法都必須在主執行緒呼叫。
+///
+/// 每個輸出裝置各有一組設定（耳機與喇叭需要的 EQ 不同）。還沒有自己設定的裝置使用「共用設定」；
+/// 第一次在某個裝置上調整時，會從共用設定複製一份成為那個裝置自己的。
 public final class EqualizerController: ObservableObject {
+    /// 目前正在檢視／編輯的那個裝置的設定。
     @Published public private(set) var settings: EQSettings
+    /// 目前正在檢視／編輯的裝置 UID；nil 表示還沒有選定裝置，此時編輯的是共用設定。
+    @Published public private(set) var deviceUID: String?
 
     private let engine: AudioEngine
-    private static let defaultsKey = "equalizerSettings"
+    private var byDevice: [String: EQSettings]
+    private var shared: EQSettings
+
+    private static let sharedKey = "equalizerSettings"
+    private static let byDeviceKey = "equalizerSettingsByDevice"
 
     public init(engine: AudioEngine) {
         self.engine = engine
-        if let data = UserDefaults.standard.data(forKey: Self.defaultsKey),
+        let defaults = UserDefaults.standard
+        if let data = defaults.data(forKey: Self.sharedKey),
            let saved = try? JSONDecoder().decode(EQSettings.self, from: data) {
-            settings = Self.sanitized(saved)
+            shared = Self.sanitized(saved)
         } else {
-            settings = .flat
+            shared = .flat
         }
-        engine.setEqualizer(settings)
+        if let data = defaults.data(forKey: Self.byDeviceKey),
+           let saved = try? JSONDecoder().decode([String: EQSettings].self, from: data) {
+            byDevice = saved.mapValues(Self.sanitized)
+        } else {
+            byDevice = [:]
+        }
+        settings = shared
+
+        engine.setEqualizer(shared, forDeviceUID: nil)
+        for (uid, deviceSettings) in byDevice {
+            engine.setEqualizer(deviceSettings, forDeviceUID: uid)
+        }
+    }
+
+    /// 切換要檢視／編輯哪個裝置的設定。
+    public func select(deviceUID: String?) {
+        guard deviceUID != self.deviceUID else { return }
+        self.deviceUID = deviceUID
+        settings = deviceUID.flatMap { byDevice[$0] } ?? shared
+    }
+
+    /// 這個裝置是否已經有自己的設定（而不是沿用共用設定）。
+    public func hasOwnSettings(deviceUID: String) -> Bool {
+        byDevice[deviceUID] != nil
     }
 
     /// 目前的頻段若與某個內建預設組完全相同，回傳它。
@@ -34,9 +68,19 @@ public final class EqualizerController: ObservableObject {
         next = Self.sanitized(next)
         guard next != settings else { return }
         settings = next
-        engine.setEqualizer(next)
-        if let data = try? JSONEncoder().encode(next) {
-            UserDefaults.standard.set(data, forKey: Self.defaultsKey)
+
+        if let deviceUID {
+            byDevice[deviceUID] = next
+            engine.setEqualizer(next, forDeviceUID: deviceUID)
+            if let data = try? JSONEncoder().encode(byDevice) {
+                UserDefaults.standard.set(data, forKey: Self.byDeviceKey)
+            }
+        } else {
+            shared = next
+            engine.setEqualizer(next, forDeviceUID: nil)
+            if let data = try? JSONEncoder().encode(next) {
+                UserDefaults.standard.set(data, forKey: Self.sharedKey)
+            }
         }
     }
 

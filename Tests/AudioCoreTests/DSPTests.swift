@@ -189,3 +189,17 @@ final class DSPKernelTests: XCTestCase {
         XCTAssertEqual(interleaved[2047], -0.3, accuracy: 1e-5)
     }
 }
+
+final class ProcessAttributionTests: XCTestCase {
+    func testHelperInsideAppResolvesToOutermostApp() {
+        let helper = URL(fileURLWithPath: "/Applications/Discord.app/Contents/Frameworks/Discord Helper (Renderer).app")
+        XCTAssertEqual(
+            AudioProcessMonitor.outermostEnclosingApp(of: helper)?.path, "/Applications/Discord.app"
+        )
+    }
+
+    func testTopLevelAppIsNotAHelper() {
+        XCTAssertNil(AudioProcessMonitor.outermostEnclosingApp(of: URL(fileURLWithPath: "/Applications/Discord.app")))
+        XCTAssertNil(AudioProcessMonitor.outermostEnclosingApp(of: URL(fileURLWithPath: "/Applications/Utilities/Terminal.app")))
+    }
+}

@@ -1,5 +1,6 @@
 import AppKit
 import AudioCore
+import Combine
 import os
 import SwiftUI
 
@@ -21,6 +22,7 @@ struct SoundDeckApp: App {
         Window("等化器", id: WindowID.equalizer) {
             EQEditorView()
                 .environmentObject(appDelegate.engine)
+                .environmentObject(appDelegate.devices)
                 .environmentObject(appDelegate.equalizer)
         }
         .windowResizability(.contentSize)
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let equalizer: EqualizerController
     let mixer: MixerController
     private var statsLogTimer: Timer?
+    private var subscriptions = Set<AnyCancellable>()
 
     override init() {
         engine = AudioEngine()
@@ -46,6 +49,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         equalizer = EqualizerController(engine: engine)
         mixer = MixerController(engine: engine)
         super.init()
+
+        // EQ 預設跟著系統目前的輸出裝置走：切換輸出時，檢視與編輯的對象也換成新裝置的設定。
+        devices.$currentDeviceID
+            .map { [devices] _ in devices.currentDevice?.uid }
+            .removeDuplicates()
+            .sink { [equalizer] uid in equalizer.select(deviceUID: uid) }
+            .store(in: &subscriptions)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -75,6 +85,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         engine.start()
 
+        // 開發用：--route-test <App ID> <裝置名稱>，啟動 8 秒後把該 App 指定到該裝置，再過 10 秒還原。
+        if let index = CommandLine.arguments.firstIndex(of: "--route-test"), index + 2 < CommandLine.arguments.count {
+            let appID = CommandLine.arguments[index + 1]
+            let deviceName = CommandLine.arguments[index + 2]
+            let wasEnabled = mixer.isPerAppRoutingEnabled
+            DispatchQueue.main.asyncAfter(deadline: .now() + 8) { [mixer, devices] in
+                guard let device = devices.devices.first(where: { $0.name == deviceName }) else { return }
+                let previous = mixer.channels.first { $0.id == appID }?.deviceUID
+                mixer.setPerAppRoutingEnabled(true)
+                mixer.setDevice(device.uid, for: appID)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
+                    mixer.setDevice(previous, for: appID)
+                    mixer.setPerAppRoutingEnabled(wasEnabled)
+                }
+            }
+        }
+
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(
             forName: NSWorkspace.willSleepNotification, object: nil, queue: .main
@@ -88,12 +115,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let logger = Logger(subsystem: "local.sounddeck.app", category: "stats")
             statsLogTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [engine, mixer] _ in
                 let status = String(describing: engine.status)
-                let peaks = engine.readSlotPeaks() ?? []
-                let rows = ([mixer.other] + mixer.channels).map { channel in
-                    let peak = channel.slot < peaks.count ? peaks[channel.slot] : 0
-                    return "\(channel.name)#\(channel.slot)=\(String(format: "%.3f", peak))"
+                // 每條管線各列出有聲音的槽位，用來確認每個 App 實際是從哪個裝置播出的。
+                let names = Dictionary(uniqueKeysWithValues: ([mixer.other] + mixer.channels).map { ($0.slot, $0.name) })
+                let summary = engine.readSlotPeaksByDevice().map { device, peaks in
+                    let active = peaks.enumerated().filter { $0.element > 0.0005 }.map { slot, peak in
+                        "\(names[slot] ?? "槽位\(slot)")=\(String(format: "%.3f", peak))"
+                    }
+                    return "[\(device)] " + (active.isEmpty ? "靜音" : active.joined(separator: " "))
                 }
-                logger.notice("mixer \(rows.joined(separator: " "), privacy: .public)")
+                logger.notice("mixer \(summary.joined(separator: " "), privacy: .public)")
                 if let stats = engine.readStats() {
                     logger.notice("callbacks=\(stats.callbackCount) peak=\(stats.inputPeak) status=\(status, privacy: .public)")
                 } else {

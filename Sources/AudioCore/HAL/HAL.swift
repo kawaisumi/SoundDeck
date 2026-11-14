@@ -185,6 +185,11 @@ enum HAL {
         }
     }
 
+    /// 依 UID 找出目前可用的輸出裝置；裝置不存在或不能輸出時回傳 nil。
+    static func outputDevice(forUID uid: String) -> AudioObjectID? {
+        outputDeviceIDs().first { (try? deviceUID($0)) == uid }
+    }
+
     static func transportType(_ device: AudioObjectID) -> UInt32 {
         (try? read(device, kAudioDevicePropertyTransportType, initial: UInt32(0), "讀取連接方式")) ?? 0
     }

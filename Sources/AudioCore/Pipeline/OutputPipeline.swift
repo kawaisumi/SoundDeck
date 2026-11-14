@@ -21,17 +21,20 @@ public struct PipelineStats: Equatable, Sendable {
     public var inputPeak: Float
 }
 
-/// 混音器的路由狀態：每個槽位攔截哪些 process、增益多少。
+/// 混音器的路由狀態：每個槽位攔截哪些 process、增益多少、要從哪個裝置播出。
 ///
-/// 槽位 0 固定是「系統音效與其他」：攔截所有沒有被分配到其他槽位的聲音，它的 `processes` 不使用。
+/// 槽位 0 固定是「系統音效與其他」：攔截所有沒有被分配到其他槽位的聲音，它的 `processes` 與 `devices` 不使用。
 struct MixerRouting: Equatable {
     var processes: [[AudioObjectID]]
     var gains: [Float]
+    /// 各槽位指定的輸出裝置 UID；nil 表示跟隨系統預設。
+    var devices: [String?]
 
     static func empty(slotCount: Int) -> MixerRouting {
         MixerRouting(
             processes: Array(repeating: [], count: slotCount),
-            gains: Array(repeating: 1, count: slotCount)
+            gains: Array(repeating: 1, count: slotCount),
+            devices: Array(repeating: nil, count: slotCount)
         )
     }
 }
@@ -40,7 +43,12 @@ struct MixerRouting: Equatable {
 ///
 /// 做法是建立一個 private aggregate device，把實體輸出裝置當子裝置，並掛上固定數量的 tap（槽位）。
 /// 槽位數量建立後不變，App 的增減只是改寫各 tap 攔截的對象，所以 IOProc 不需要重啟、聲音不會中斷。
-/// 每個使用中的輸出裝置各有一條管線（README §2.5）。
+///
+/// 每個使用中的輸出裝置各有一條管線（README §2.5）。管線有兩個裝置的概念：
+/// - **輸出裝置**：這條管線把聲音送到哪裡。
+/// - **來源裝置**：各 App 槽位的 tap 攔截「送往哪個裝置」的聲音。App 一律是往系統預設輸出播放的，
+///   所以來源永遠是系統預設輸出；把某個 App 指定到別的裝置，就是在那個裝置的管線裡攔截它送往預設輸出的聲音。
+/// 槽位 0（其他）則是攔截原本就直接送往這條管線輸出裝置的聲音。
 final class OutputPipeline {
     let info: PipelineInfo
     let deviceUID: String
@@ -55,29 +63,35 @@ final class OutputPipeline {
 
     var slotCount: Int { taps.count }
 
+    /// - Parameters:
+    ///   - sourceDeviceUID: App 槽位的 tap 要攔截送往哪個裝置的聲音（系統預設輸出）。
+    ///   - slotProcesses: 各槽位要攔截的 process；索引 0 不使用。
+    ///   - excluded: 已經被任何一條管線的槽位接手的所有 process，槽位 0 不能再抓它們。
     init(
         outputDevice: AudioObjectID,
+        sourceDeviceUID: String,
         ownProcess: AudioObjectID,
-        routing: MixerRouting,
+        slotProcesses: [[AudioObjectID]],
+        excluded: [AudioObjectID],
+        slotGains: [Float],
         initialGain: Float,
         equalizer: EQSettings
     ) throws {
         let outputUID = try HAL.deviceUID(outputDevice)
         let deviceName = HAL.deviceName(outputDevice)
-        let slotCount = routing.processes.count
+        let slotCount = slotProcesses.count
 
         // 自己一定要排除，否則我們送出去的聲音又會被自己攔截，形成回授。
-        let assigned = routing.processes.dropFirst().flatMap { $0 }
         var taps: [ProcessTap] = [
             try ProcessTap(
-                mode: .excluding, processes: [ownProcess] + assigned,
+                mode: .excluding, processes: [ownProcess] + excluded,
                 outputDeviceUID: outputUID, name: "SoundDeck 其他"
             ),
         ]
         for slot in 1..<slotCount {
             taps.append(try ProcessTap(
-                mode: .including, processes: routing.processes[slot],
-                outputDeviceUID: outputUID, name: "SoundDeck 槽位 \(slot)"
+                mode: .including, processes: slotProcesses[slot],
+                outputDeviceUID: sourceDeviceUID, name: "SoundDeck 槽位 \(slot)"
             ))
         }
 
@@ -171,7 +185,7 @@ final class OutputPipeline {
 
             let state = UnsafeMutablePointer<RenderState>.allocate(capacity: 1)
             state.initialize(to: RenderState(
-                slotLeft: slotLeft, slotRight: slotRight, slotGains: routing.gains,
+                slotLeft: slotLeft, slotRight: slotRight, slotGains: slotGains,
                 outLeft: outLeft, outRight: outRight,
                 dsp: DSPKernel(sampleRate: info.sampleRate, initialVolume: Double(initialGain))
             ))
@@ -231,30 +245,31 @@ final class OutputPipeline {
 
     // MARK: - 混音器
 
-    /// 套用新的路由：改寫各 tap 攔截的對象，並更新各槽位的增益。
-    ///
-    /// 改寫的順序是刻意安排的：一個 process 在「其他」與自己的槽位之間搬移時，
-    /// 寧可有一瞬間兩邊都抓到（聲音短暫重疊），也不要兩邊都沒抓到（那一瞬間它的原聲會不受控制地直接播出）。
-    func applyRouting(_ routing: MixerRouting) {
-        guard routing.processes.count == slotCount, routing.gains.count == slotCount else { return }
+    // 套用新的路由分成兩步，由引擎對所有管線先做完第一步、再做第二步。
+    // 順序是刻意安排的：一個 process 在槽位之間、管線之間搬移時，寧可有一瞬間兩邊都抓到（聲音短暫重疊），
+    // 也不要兩邊都沒抓到（那一瞬間它的原聲會不受控制地從預設裝置直接播出）。
+
+    /// 第一步：更新增益、讓有新成員的槽位開始攔截、更新槽位 0 的排除清單。
+    func beginRouting(slotProcesses: [[AudioObjectID]], excluded: [AudioObjectID], slotGains: [Float]) {
+        guard slotProcesses.count == slotCount, slotGains.count == slotCount else { return }
 
         for slot in 0..<slotCount {
-            state.pointee.slotGainTarget[slot] = max(0, routing.gains[slot])
+            state.pointee.slotGainTarget[slot] = max(0, slotGains[slot])
         }
-
-        // 1. 先讓有新成員的槽位開始攔截。
         for slot in 1..<slotCount {
             let current = Set(taps[slot].processes)
-            if routing.processes[slot].contains(where: { !current.contains($0) }) {
-                taps[slot].setProcesses(Array(current.union(routing.processes[slot])))
+            if slotProcesses[slot].contains(where: { !current.contains($0) }) {
+                taps[slot].setProcesses(Array(current.union(slotProcesses[slot])).sorted())
             }
         }
-        // 2. 更新「其他」的排除清單。
-        let assigned = routing.processes.dropFirst().flatMap { $0 }
-        taps[0].setProcesses([ownProcess] + assigned)
-        // 3. 最後才讓槽位放掉已經不屬於它的 process。
+        taps[0].setProcesses([ownProcess] + excluded)
+    }
+
+    /// 第二步：讓槽位放掉已經不屬於它的 process。
+    func finishRouting(slotProcesses: [[AudioObjectID]]) {
+        guard slotProcesses.count == slotCount else { return }
         for slot in 1..<slotCount {
-            taps[slot].setProcesses(routing.processes[slot])
+            taps[slot].setProcesses(slotProcesses[slot])
         }
     }
 

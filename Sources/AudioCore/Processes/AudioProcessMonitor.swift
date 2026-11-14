@@ -5,7 +5,7 @@ import Foundation
 
 /// 一個正在使用音訊的 App，以及屬於它的所有音訊 process（含 helper）。
 struct AudioAppSnapshot: Equatable {
-    /// bundle ID；沒有 bundle ID 的 App 用 "pid-<PID>"。
+    /// bundle ID；沒有 bundle ID 的程式（例如指令列工具開的視窗）用 "name-<名稱>"，這樣設定才能跨次啟動保留。
     let id: String
     let name: String
     let bundleURL: URL?
@@ -72,8 +72,12 @@ final class AudioProcessMonitor {
 
     // MARK: - 歸屬判定
 
-    /// 依序嘗試：process 自己 → 系統記錄的「負責的 process」→ 往上找父 process。
-    /// 第一個是一般 App（會出現在 Dock 或選單列）的就是擁有者。
+    /// 找出一個音訊 process 是替哪個 App 發聲的。
+    ///
+    /// 候選依序是：process 自己 → 系統記錄的「負責的 process」→ 往上的父 process。
+    /// 第一個「獨立的 App」就是擁有者。包在別的 App 裡面的 helper（例如
+    /// `Discord.app/Contents/Frameworks/Discord Helper.app`）雖然系統也把它當成 App，但不算獨立，
+    /// 要繼續往上找；真的都找不到時，改用包住它的最外層 App。
     private static func findOwner(of pid: pid_t, ownPID: pid_t) -> Owner? {
         var candidates: [pid_t] = [pid]
         if let responsible = responsiblePID(for: pid), responsible > 0 {
@@ -86,17 +90,43 @@ final class AudioProcessMonitor {
             current = parent
         }
 
+        var enclosingBundle: URL?
         for candidate in candidates where candidate != ownPID {
             guard let app = NSRunningApplication(processIdentifier: candidate),
                   app.activationPolicy != .prohibited
             else { continue }
-            return Owner(
-                id: app.bundleIdentifier ?? "pid-\(candidate)",
-                name: app.localizedName ?? app.bundleIdentifier ?? "PID \(candidate)",
-                bundleURL: app.bundleURL
-            )
+            if let outer = app.bundleURL.flatMap(outermostEnclosingApp) {
+                enclosingBundle = enclosingBundle ?? outer
+                continue
+            }
+            return owner(for: app, pid: candidate)
+        }
+
+        if let enclosingBundle,
+           let app = NSWorkspace.shared.runningApplications.first(where: {
+               $0.bundleURL?.standardizedFileURL == enclosingBundle && $0.processIdentifier != ownPID
+           }) {
+            return owner(for: app, pid: app.processIdentifier)
         }
         return nil
+    }
+
+    private static func owner(for app: NSRunningApplication, pid: pid_t) -> Owner {
+        Owner(
+            id: app.bundleIdentifier ?? app.localizedName.map { "name-\($0)" } ?? "pid-\(pid)",
+            name: app.localizedName ?? app.bundleIdentifier ?? "PID \(pid)",
+            bundleURL: app.bundleURL
+        )
+    }
+
+    /// 如果這個 bundle 位在另一個 .app 裡面，回傳最外層那個 .app；本身就是最外層則回傳 nil。
+    static func outermostEnclosingApp(of bundleURL: URL) -> URL? {
+        let components = bundleURL.standardizedFileURL.pathComponents
+        guard let first = components.firstIndex(where: { $0.hasSuffix(".app") }),
+              first < components.count - 1
+        else { return nil }
+        return URL(fileURLWithPath: NSString.path(withComponents: Array(components[...first])))
+            .standardizedFileURL
     }
 
     private typealias ResponsibilityFunction = @convention(c) (pid_t) -> pid_t

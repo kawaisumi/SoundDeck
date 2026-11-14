@@ -8,9 +8,20 @@ struct MixerSection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("混音器")
+            HStack {
+                Text("混音器")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Toggle("依 App 指定裝置", isOn: Binding(
+                    get: { mixer.isPerAppRoutingEnabled },
+                    set: { mixer.setPerAppRoutingEnabled($0) }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.mini)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .help("開啟後可以讓各 App 從不同的輸出裝置播放；關閉時全部走系統預設輸出，已指定的設定會保留。")
+            }
 
             // 只有 Popover 開著時這個 view 才存在，所以收起來時不會輪詢電平。
             TimelineView(.periodic(from: .now, by: 0.1)) { _ in
@@ -38,10 +49,61 @@ struct MixerSection: View {
 
 private struct MixerRow: View {
     @EnvironmentObject private var mixer: MixerController
+    @EnvironmentObject private var devices: DeviceManager
     let channel: MixerChannel
     let peak: Float
 
     private var isOther: Bool { channel.id == MixerController.otherID }
+
+    /// 指定的裝置目前接著才算數；拔掉時這個 App 會暫時走系統預設。
+    private var assignedDevice: OutputDevice? {
+        guard let uid = channel.deviceUID else { return nil }
+        return devices.devices.first { $0.uid == uid }
+    }
+
+    private var deviceMenu: some View {
+        Menu {
+            Button {
+                mixer.setDevice(nil, for: channel.id)
+            } label: {
+                menuLabel("跟隨系統預設", isSelected: channel.deviceUID == nil)
+            }
+            Divider()
+            ForEach(devices.devices) { device in
+                Button {
+                    mixer.setDevice(device.uid, for: channel.id)
+                } label: {
+                    menuLabel(device.name, isSelected: channel.deviceUID == device.uid)
+                }
+            }
+        } label: {
+            Image(systemName: channel.deviceUID == nil ? "hifispeaker" : "hifispeaker.fill")
+                .foregroundStyle(channel.deviceUID == nil ? Color.secondary : Color.accentColor)
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .help("選擇這個 App 的輸出裝置")
+        .accessibilityLabel("\(channel.name) 的輸出裝置")
+    }
+
+    @ViewBuilder
+    private func menuLabel(_ title: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+
+    /// 名稱下方的小字：這個 App 被指定到哪個裝置。
+    private var deviceCaption: String? {
+        guard mixer.isPerAppRoutingEnabled, !isOther, channel.deviceUID != nil else { return nil }
+        if let device = assignedDevice {
+            return device.id == devices.currentDeviceID ? nil : "→ \(device.name)"
+        }
+        return "指定的裝置未連接，暫時使用系統預設"
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -63,6 +125,14 @@ private struct MixerRow: View {
                         .foregroundStyle(.secondary)
                 }
 
+                if let deviceCaption {
+                    Text(deviceCaption)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+
                 Slider(
                     value: Binding(
                         get: { Double(channel.volume) },
@@ -75,6 +145,10 @@ private struct MixerRow: View {
                 .accessibilityLabel("\(channel.name) 音量")
 
                 LevelBar(peak: peak)
+            }
+
+            if mixer.isPerAppRoutingEnabled, !isOther {
+                deviceMenu
             }
 
             Button {
