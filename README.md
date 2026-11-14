@@ -179,9 +179,7 @@ aggregate device 與一條處理鏈（增益 → 混合 → EQ → Limiter），
 - App 結束時立即移除。
 
 **動態增減 tap**
-- 優先嘗試在 IOProc 不停止的情況下修改 `kAudioAggregateDevicePropertyTapList`。
-- 若系統不允許熱插拔而必須重建，對現有聲音做 5–10 ms 的淡出／淡入。
-- 新加入的 App 本身從靜音淡入，避免第一個緩衝區出現爆音。
+- 已改用固定槽位，不需要增減 tap，見 §2.7。
 
 **休眠與喚醒**
 - `NSWorkspace.willSleepNotification`：主動停止 IOProc 並拆除管線。
@@ -193,6 +191,29 @@ aggregate device 與一條處理鏈（增益 → 混合 → EQ → Limiter），
 - EQ 控制點：按住 `Shift` 拖曳進入微調模式（靈敏度降為 1/5）；雙擊控制點把該段增益歸零；
   `Option` 加雙擊重設整段。
 - EQ 編輯器可以「釘選」成獨立視窗：Popover 點到外面就會收合，不適合長時間調整與輸入數值。
+
+### 2.7 混音器的槽位架構
+
+M3 開頭的實驗確認了兩件事：一個 aggregate device 可以掛多個 tap（每個 tap 是一條獨立的 2 聲道輸入串流），
+而且 **tap 攔截的對象可以在執行中改寫**（設定 `kAudioTapPropertyDescription`），IOProc 不會中斷、
+串流配置也不會變。因此不需要動態增減 tap，改用固定槽位：
+
+- 管線建立時就掛上 13 個 tap。槽位 0 是「排除模式」，攔截所有沒被分配的聲音（系統音效與其他）；
+  槽位 1–12 是「包含模式」，一開始不攔截任何 process。
+- App 開始使用音訊時，把它的所有音訊 process（含 helper）寫進一個空槽位，同時加進槽位 0 的排除清單。
+- 改寫順序固定為「槽位先接手 → 更新排除清單 → 槽位放掉舊成員」，寧可短暫重疊也不要出現空窗。
+- 即時執行緒對每個槽位套用各自的增益（逐緩衝區平滑）後混合，再進 EQ 與 Limiter。
+
+**歸屬判定**：音訊 process 自己 → 系統記錄的「負責的 process」→ 往上找父 process，
+第一個是一般 App 的就是擁有者。「負責的 process」用的是 `responsibility_get_pid_responsible_for_pid`，
+不在公開標頭裡，以 `dlsym` 取得，取不到時退回只用父 process。
+從終端機執行的指令列程式會歸到終端機 App 底下。
+
+**已知限制**
+- 同時最多 12 個 App 有自己的一列，超過的留在「系統音效與其他」。
+- App 剛開始使用音訊到被分配槽位之間（事件驅動，通常遠小於 1 秒），聲音走「其他」的音量。
+  音量調整過的 App 只要有音訊 process 就預先佔好槽位，所以被靜音的 App 不會漏音。
+- 13 個 tap 常駐時 `coreaudiod` 約佔單核 8%（未量測沒有 SoundDeck 時的基準值）。
 
 ---
 
@@ -209,6 +230,7 @@ eqMac/
 │   │   ├── Processes/             # 音訊 process 列舉、helper 歸併到主 App
 │   │   ├── Tap/                   # Process Tap、aggregate device、IOProc 生命週期
 │   │   ├── DSP/                   # Biquad、參數式 EQ、頻率響應計算、Limiter、增益平滑、電平量測
+│   │   ├── Mixer/                 # MixerController：槽位分配、各 App 音量
 │   │   ├── Pipeline/              # OutputPipeline：單一輸出裝置的 tap 集合與處理鏈
 │   │   └── Engine/                # AudioEngine：管理多條管線、App→裝置的路由，對外介面
 │   ├── Persistence/               # 設定模型與儲存
@@ -253,9 +275,13 @@ eqMac/
   - [x] 單元測試 12 項：係數的頻率響應、Limiter 不超過門檻且會恢復、參數切換、交錯聲道
   - 實測：編輯器操作與聽感正常
   - 未做：滾輪調 Q（目前用滑桿）、自訂預設組的儲存（排在 M5）
-- [ ] **M3 — App 混音器**
-  - 改為每個 App 一個 tap；各自音量、靜音、電平表
-  - Helper process 歸併到主 App（見 §5）
+- [x] **M3 — App 混音器**
+  - [x] 管線改為固定 13 個槽位（1 個「系統音效與其他」＋ 12 個 App），見 §2.7
+  - [x] 找出使用音訊的 App，helper process 歸併到主 App
+  - [x] 各 App 音量（0–200%）、靜音、電平表；設定依 bundle ID 記住
+  - [x] 停止發聲後保留 30 秒；調整過的 App 只要還在使用音訊就一直顯示
+  - 已確認：實機上測試音與遊戲被分到不同槽位、電平各自獨立；13 個槽位的管線約 2 秒內啟動
+  - 實測：各 App 音量、靜音、瀏覽器歸屬、暫停後保留都正常
 - [ ] **M4 — 依 App 指定輸出裝置**
   - 總開關、每列的裝置選單、多條管線同時運作（§2.5）
   - 裝置消失時退回系統預設、回來時恢復
@@ -273,7 +299,7 @@ eqMac/
 | **Helper process** | 瀏覽器、Electron App 的聲音實際上由 helper process 發出（如 `Google Chrome Helper`、`com.apple.WebKit.GPU`），不是主程式 | 沿著 parent PID／responsible process 往上找到主 App 再歸併；Safari 的 WebKit process 需要特別處理 |
 | **即時執行緒安全** | IOProc 內不能配置記憶體、上鎖、呼叫 Swift runtime 中可能阻塞的東西，否則會爆音 | 參數用 atomic／lock-free 方式傳遞；所有 buffer 預先配置；DSP 寫成不配置記憶體的純運算 |
 | **延遲** | 多一層轉送必然增加延遲，影片對嘴與遊戲會受影響 | M0 就量測；調小 buffer size；必要時提供「低延遲模式」 |
-| **多 tap 的 aggregate device** | 一個 aggregate device 掛多個 tap、動態增減 tap 的行為文件很少 | M3 開頭先做小型實驗；備案是每個 App 各自一個 aggregate device |
+| **多 tap 的 aggregate device** | 一個 aggregate device 掛多個 tap、動態增減 tap 的行為文件很少 | 已解決：實驗確認可行，改用固定槽位（§2.7） |
 | **App 在裝置間搬移** | 改變某 App 的指定裝置時，要把它的 tap 從一條管線移到另一條，過程中可能有短暫斷音 | 搬移時對該 App 做極短的淡出／淡入；先求不爆音 |
 | **權限與簽章** | TCC 權限綁定程式簽章；ad-hoc 簽章每次重新建置都可能要重新授權 | 建立一張固定的自簽憑證專門簽這個 App |
 | **取樣率／格式變化** | 不同裝置取樣率不同，切換時 EQ 係數要重算 | 管線重建時一併以新取樣率重算係數 |
@@ -330,6 +356,7 @@ open build/SoundDeck.app --args --log-stats
 ```
 
 列出偵測到的輸出裝置與音量控制方式後直接結束，不啟動音訊處理。
+`--dump-apps` 同理，列出混音器目前會顯示的 App。
 
 ### 測試
 

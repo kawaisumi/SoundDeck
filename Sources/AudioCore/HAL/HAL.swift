@@ -240,6 +240,23 @@ enum HAL {
         return (Int(pair.0), Int(pair.1))
     }
 
+    // MARK: - 音訊 process
+
+    /// 目前所有向系統註冊過音訊的 process 物件。
+    static func processObjectIDs() -> [AudioObjectID] {
+        (try? readArray(
+            systemObject, kAudioHardwarePropertyProcessObjectList, of: AudioObjectID.self, "列舉音訊 process"
+        )) ?? []
+    }
+
+    static func processPID(_ process: AudioObjectID) -> pid_t? {
+        try? read(process, kAudioProcessPropertyPID, initial: pid_t(-1), "讀取 process PID")
+    }
+
+    static func processIsRunningOutput(_ process: AudioObjectID) -> Bool {
+        ((try? read(process, kAudioProcessPropertyIsRunningOutput, initial: UInt32(0), "讀取 process 輸出狀態")) ?? 0) != 0
+    }
+
     /// 把 PID 轉成 Core Audio 的 process 物件。該 process 尚未使用音訊時回傳 nil。
     static func processObject(pid: pid_t) -> AudioObjectID? {
         var addr = address(kAudioHardwarePropertyTranslatePIDToProcessObject)

@@ -23,6 +23,10 @@ struct MenuView: View {
 
             Divider()
 
+            MixerSection()
+
+            Divider()
+
             EqualizerSection()
 
             Divider()

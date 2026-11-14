@@ -21,39 +21,75 @@ public struct PipelineStats: Equatable, Sendable {
     public var inputPeak: Float
 }
 
-/// 單一輸出裝置的處理管線：tap → （之後的增益／EQ／Limiter）→ 實體輸出裝置。
+/// 混音器的路由狀態：每個槽位攔截哪些 process、增益多少。
 ///
-/// 做法是建立一個 private aggregate device，把實體輸出裝置當子裝置、tap 掛在 tap list，
-/// 然後在 aggregate device 上跑 IOProc。每個使用中的輸出裝置各有一條（README §2.5）。
+/// 槽位 0 固定是「系統音效與其他」：攔截所有沒有被分配到其他槽位的聲音，它的 `processes` 不使用。
+struct MixerRouting: Equatable {
+    var processes: [[AudioObjectID]]
+    var gains: [Float]
+
+    static func empty(slotCount: Int) -> MixerRouting {
+        MixerRouting(
+            processes: Array(repeating: [], count: slotCount),
+            gains: Array(repeating: 1, count: slotCount)
+        )
+    }
+}
+
+/// 單一輸出裝置的處理管線：各 App 的 tap → 各自的增益 → 混合 → 前級／EQ／Limiter／主音量 → 實體輸出裝置。
+///
+/// 做法是建立一個 private aggregate device，把實體輸出裝置當子裝置，並掛上固定數量的 tap（槽位）。
+/// 槽位數量建立後不變，App 的增減只是改寫各 tap 攔截的對象，所以 IOProc 不需要重啟、聲音不會中斷。
+/// 每個使用中的輸出裝置各有一條管線（README §2.5）。
 final class OutputPipeline {
     let info: PipelineInfo
     let deviceUID: String
 
-    private let tap: ProcessTap
+    /// taps[0] 是「其他」（排除模式），其餘是各 App 的槽位（包含模式）。
+    private let taps: [ProcessTap]
+    private let ownProcess: AudioObjectID
     private let aggregateID: AudioObjectID
     private var ioProcID: AudioDeviceIOProcID?
     private var isRunning = false
     private let state: UnsafeMutablePointer<RenderState>
 
+    var slotCount: Int { taps.count }
+
     init(
         outputDevice: AudioObjectID,
-        excluding excludedProcesses: [AudioObjectID],
+        ownProcess: AudioObjectID,
+        routing: MixerRouting,
         initialGain: Float,
         equalizer: EQSettings
     ) throws {
         let outputUID = try HAL.deviceUID(outputDevice)
         let deviceName = HAL.deviceName(outputDevice)
+        let slotCount = routing.processes.count
 
-        let tap = try ProcessTap(
-            outputDeviceUID: outputUID, streamIndex: 0,
-            excluding: excludedProcesses, name: "SoundDeck"
-        )
-        guard tap.channelCount >= 1,
-              tap.format.mFormatID == kAudioFormatLinearPCM,
-              tap.format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
-              tap.format.mBitsPerChannel == 32
-        else {
-            throw CoreAudioError(status: kAudioDeviceUnsupportedFormatError, operation: "檢查 tap 格式")
+        // 自己一定要排除，否則我們送出去的聲音又會被自己攔截，形成回授。
+        let assigned = routing.processes.dropFirst().flatMap { $0 }
+        var taps: [ProcessTap] = [
+            try ProcessTap(
+                mode: .excluding, processes: [ownProcess] + assigned,
+                outputDeviceUID: outputUID, name: "SoundDeck 其他"
+            ),
+        ]
+        for slot in 1..<slotCount {
+            taps.append(try ProcessTap(
+                mode: .including, processes: routing.processes[slot],
+                outputDeviceUID: outputUID, name: "SoundDeck 槽位 \(slot)"
+            ))
+        }
+
+        let tapChannels = taps[0].channelCount
+        for tap in taps {
+            guard tap.channelCount == tapChannels, tapChannels >= 1,
+                  tap.format.mFormatID == kAudioFormatLinearPCM,
+                  tap.format.mFormatFlags & kAudioFormatFlagIsFloat != 0,
+                  tap.format.mBitsPerChannel == 32
+            else {
+                throw CoreAudioError(status: kAudioDeviceUnsupportedFormatError, operation: "檢查 tap 格式")
+            }
         }
 
         let description: [String: Any] = [
@@ -66,12 +102,12 @@ final class OutputPipeline {
             kAudioAggregateDeviceSubDeviceListKey: [
                 [kAudioSubDeviceUIDKey: outputUID],
             ],
-            kAudioAggregateDeviceTapListKey: [
+            kAudioAggregateDeviceTapListKey: taps.map { tap -> [String: Any] in
                 [
                     kAudioSubTapUIDKey: tap.uuid.uuidString,
                     kAudioSubTapDriftCompensationKey: true,
-                ],
-            ],
+                ]
+            },
         ]
 
         var aggregateID = AudioObjectID(kAudioObjectUnknown)
@@ -82,32 +118,39 @@ final class OutputPipeline {
 
         do {
             // aggregate device 剛建立時，串流配置可能還沒就緒，稍等一下。
+            let tapChannelTotal = tapChannels * slotCount
             var inputLayout: [Int] = []
             var outputLayout: [Int] = []
             for _ in 0..<40 {
                 inputLayout = (try? HAL.channelLayout(aggregateID, scope: kAudioObjectPropertyScopeInput)) ?? []
                 outputLayout = (try? HAL.channelLayout(aggregateID, scope: kAudioObjectPropertyScopeOutput)) ?? []
-                if inputLayout.reduce(0, +) >= tap.channelCount, outputLayout.reduce(0, +) >= 1 { break }
+                if inputLayout.reduce(0, +) >= tapChannelTotal, outputLayout.reduce(0, +) >= 1 { break }
                 Thread.sleep(forTimeInterval: 0.05)
             }
             let inputTotal = inputLayout.reduce(0, +)
             let outputTotal = outputLayout.reduce(0, +)
-            guard inputTotal >= tap.channelCount, outputTotal >= 1 else {
+            guard inputTotal >= tapChannelTotal, outputTotal >= 1 else {
                 throw CoreAudioError(status: kAudioHardwareNotReadyError, operation: "等待 aggregate device 就緒")
             }
 
-            // 輸入端：實體裝置若自己有輸入聲道（例如 USB 耳麥），它們排在前面，tap 的聲道排在最後。
-            // 一定要取 tap 的聲道，否則會把麥克風送進喇叭。
-            // tap 的聲道配置跟裝置串流相同，所以輸入與輸出都取裝置偏好的立體聲聲道；
-            // 單聲道則左右都用同一個。
+            // 輸入端：實體裝置若自己有輸入聲道（例如 USB 耳麥），它們排在前面，
+            // 各 tap 的聲道依 tap list 的順序排在最後。一定要取 tap 的聲道，否則會把麥克風送進喇叭。
+            // tap 的聲道配置跟裝置串流相同，所以輸入與輸出都取裝置偏好的立體聲聲道；單聲道則左右用同一個。
             let preferred = HAL.preferredStereoChannels(outputDevice)
-            let tapOffset = inputTotal - tap.channelCount
-            let tapLeft = tapOffset + min(preferred.left - 1, tap.channelCount - 1)
-            let tapRight = tapOffset + min(preferred.right - 1, tap.channelCount - 1)
-            guard let inLeft = ChannelRef.resolve(globalIndex: tapLeft, layout: inputLayout),
-                  let inRight = ChannelRef.resolve(globalIndex: tapRight, layout: inputLayout)
-            else {
-                throw CoreAudioError(status: kAudioHardwareBadStreamError, operation: "定位 tap 聲道")
+            let tapOffset = inputTotal - tapChannelTotal
+            var slotLeft: [ChannelRef] = []
+            var slotRight: [ChannelRef] = []
+            for slot in 0..<slotCount {
+                let base = tapOffset + slot * tapChannels
+                guard let left = ChannelRef.resolve(
+                    globalIndex: base + min(preferred.left - 1, tapChannels - 1), layout: inputLayout
+                ), let right = ChannelRef.resolve(
+                    globalIndex: base + min(preferred.right - 1, tapChannels - 1), layout: inputLayout
+                ) else {
+                    throw CoreAudioError(status: kAudioHardwareBadStreamError, operation: "定位 tap 聲道")
+                }
+                slotLeft.append(left)
+                slotRight.append(right)
             }
 
             let leftIndex = min(preferred.left - 1, outputTotal - 1)
@@ -128,12 +171,14 @@ final class OutputPipeline {
 
             let state = UnsafeMutablePointer<RenderState>.allocate(capacity: 1)
             state.initialize(to: RenderState(
-                inLeft: inLeft, inRight: inRight, outLeft: outLeft, outRight: outRight,
+                slotLeft: slotLeft, slotRight: slotRight, slotGains: routing.gains,
+                outLeft: outLeft, outRight: outRight,
                 dsp: DSPKernel(sampleRate: info.sampleRate, initialVolume: Double(initialGain))
             ))
-            self.deviceUID = outputUID
 
-            self.tap = tap
+            self.deviceUID = outputUID
+            self.taps = taps
+            self.ownProcess = ownProcess
             self.aggregateID = aggregateID
             self.info = info
             self.state = state
@@ -142,7 +187,7 @@ final class OutputPipeline {
 
             Log.info(
                 "管線建立：\(deviceName) \(info.sampleRate) Hz，緩衝 \(info.bufferFrames) frames"
-                + "（\(String(format: "%.1f", info.bufferMilliseconds)) ms），"
+                + "（\(String(format: "%.1f", info.bufferMilliseconds)) ms），\(slotCount) 個槽位，"
                 + "輸入配置 \(inputLayout)（tap 起始聲道 \(tapOffset)），"
                 + "輸出配置 \(outputLayout)（L=\(leftIndex) R=\(rightIndex)）"
             )
@@ -184,6 +229,46 @@ final class OutputPipeline {
         ioProcID = nil
     }
 
+    // MARK: - 混音器
+
+    /// 套用新的路由：改寫各 tap 攔截的對象，並更新各槽位的增益。
+    ///
+    /// 改寫的順序是刻意安排的：一個 process 在「其他」與自己的槽位之間搬移時，
+    /// 寧可有一瞬間兩邊都抓到（聲音短暫重疊），也不要兩邊都沒抓到（那一瞬間它的原聲會不受控制地直接播出）。
+    func applyRouting(_ routing: MixerRouting) {
+        guard routing.processes.count == slotCount, routing.gains.count == slotCount else { return }
+
+        for slot in 0..<slotCount {
+            state.pointee.slotGainTarget[slot] = max(0, routing.gains[slot])
+        }
+
+        // 1. 先讓有新成員的槽位開始攔截。
+        for slot in 1..<slotCount {
+            let current = Set(taps[slot].processes)
+            if routing.processes[slot].contains(where: { !current.contains($0) }) {
+                taps[slot].setProcesses(Array(current.union(routing.processes[slot])))
+            }
+        }
+        // 2. 更新「其他」的排除清單。
+        let assigned = routing.processes.dropFirst().flatMap { $0 }
+        taps[0].setProcesses([ownProcess] + assigned)
+        // 3. 最後才讓槽位放掉已經不屬於它的 process。
+        for slot in 1..<slotCount {
+            taps[slot].setProcesses(routing.processes[slot])
+        }
+    }
+
+    /// 讀取各槽位的峰值，並歸零以便下次重新累計。
+    func readSlotPeaks() -> [Float] {
+        (0..<slotCount).map { slot in
+            let peak = state.pointee.slotPeak[slot]
+            state.pointee.slotPeak[slot] = 0
+            return peak
+        }
+    }
+
+    // MARK: - 主音量與 EQ
+
     /// 設定管線末端的增益（軟體音量）。即時執行緒會平滑地過渡過去。
     func setGain(_ gain: Float) {
         withUnsafeMutablePointer(to: &state.pointee.dsp) {
@@ -209,6 +294,8 @@ final class OutputPipeline {
         }
     }
 
+    // MARK: - 診斷
+
     /// IOProc 至今被呼叫的次數。啟動後應該持續增加。
     var callbackCount: UInt64 { state.pointee.callbackCount }
 
@@ -228,8 +315,8 @@ final class OutputPipeline {
     deinit {
         stop()
         AudioHardwareDestroyAggregateDevice(aggregateID)
-        // IOProc 已停止並銷毀，之後不會再有人碰 state。tap 由屬性釋放時銷毀。
-        state.pointee.dsp.deallocate()
+        // IOProc 已停止並銷毀，之後不會再有人碰 state。各 tap 由屬性釋放時銷毀。
+        state.pointee.deallocate()
         state.deinitialize(count: 1)
         state.deallocate()
     }

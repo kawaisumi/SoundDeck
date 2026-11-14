@@ -28,6 +28,10 @@ public final class AudioEngine: ObservableObject {
     private var pipeline: OutputPipeline? // 由 lock 保護
     private var equalizer = EQSettings.flat // 由 lock 保護
 
+    /// 混音器的槽位數：槽位 0 是「系統音效與其他」，其餘各給一個 App。
+    public static let slotCount = 13
+    private var routing = MixerRouting.empty(slotCount: AudioEngine.slotCount) // 由 lock 保護
+
     /// 每次從外部要求重建就加一，用來作廢過期的延遲重建與重試。
     private var generation = 0
     private static let retryDelays: [TimeInterval] = [1, 2, 4]
@@ -104,6 +108,22 @@ public final class AudioEngine: ObservableObject {
         pipeline?.setEqualizer(settings)
     }
 
+    /// 套用混音器的路由。沒有管線時先記著，管線建立時會帶進去。
+    func setRouting(_ newRouting: MixerRouting) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard newRouting != routing else { return }
+        routing = newRouting
+        pipeline?.applyRouting(newRouting)
+    }
+
+    /// 讀取各槽位的峰值（給電平表用）；沒有管線時回傳 nil。
+    public func readSlotPeaks() -> [Float]? {
+        lock.lock()
+        defer { lock.unlock() }
+        return pipeline?.readSlotPeaks()
+    }
+
     // MARK: - 管線生命週期
 
     private func takePipeline() -> OutputPipeline? {
@@ -151,7 +171,6 @@ public final class AudioEngine: ObservableObject {
             do {
                 let device = try HAL.defaultOutputDevice()
                 let uid = try HAL.deviceUID(device)
-                // 一定要把自己排除，否則我們送出去的聲音又會被自己攔截，形成回授。
                 guard let ownProcess = HAL.processObject(pid: getpid()) else {
                     throw CoreAudioError(status: kAudioHardwareUnspecifiedError, operation: "取得自身的音訊 process 物件")
                 }
@@ -159,9 +178,10 @@ public final class AudioEngine: ObservableObject {
                 let gain = HAL.hasHardwareVolume(device) ? 1 : SoftwareVolumeStore.gain(forUID: uid)
                 self.lock.lock()
                 let equalizer = self.equalizer
+                let routing = self.routing
                 self.lock.unlock()
                 let newPipeline = try OutputPipeline(
-                    outputDevice: device, excluding: [ownProcess],
+                    outputDevice: device, ownProcess: ownProcess, routing: routing,
                     initialGain: gain, equalizer: equalizer
                 )
                 try newPipeline.start()
@@ -170,6 +190,7 @@ public final class AudioEngine: ObservableObject {
                 self.pipeline = newPipeline
                 // 建立期間設定可能又被改過，補套一次最新的。
                 newPipeline.setEqualizer(self.equalizer)
+                newPipeline.applyRouting(self.routing)
                 self.lock.unlock()
                 self.publish(.running(newPipeline.info), generation: generation)
             } catch {

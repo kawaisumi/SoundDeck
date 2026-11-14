@@ -13,6 +13,7 @@ struct SoundDeckApp: App {
                 .environmentObject(appDelegate.engine)
                 .environmentObject(appDelegate.devices)
                 .environmentObject(appDelegate.equalizer)
+                .environmentObject(appDelegate.mixer)
         }
         .menuBarExtraStyle(.window)
 
@@ -36,12 +37,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let engine: AudioEngine
     let devices: DeviceManager
     let equalizer: EqualizerController
+    let mixer: MixerController
     private var statsLogTimer: Timer?
 
     override init() {
         engine = AudioEngine()
         devices = DeviceManager(engine: engine)
         equalizer = EqualizerController(engine: engine)
+        mixer = MixerController(engine: engine)
         super.init()
     }
 
@@ -54,6 +57,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     current ? "*" : " ", device.name, "|", device.kind,
                     "|", device.hasHardwareVolume ? "硬體音量" : "軟體音量",
                     current ? "| 音量 \(Int((devices.volume * 100).rounded()))%" : ""
+                )
+            }
+            exit(0)
+        }
+
+        // 開發用：列出混音器目前看到的 App 後直接結束。
+        if CommandLine.arguments.contains("--dump-apps") {
+            for channel in mixer.channels {
+                print(
+                    channel.isPlaying ? "▶" : " ", channel.name, "|", channel.id,
+                    "| 槽位 \(channel.slot) | \(Int(channel.volume * 100))%\(channel.isMuted ? " 靜音" : "")"
                 )
             }
             exit(0)
@@ -72,8 +86,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // 開發用：加上 --log-stats 啟動時，每 2 秒把診斷數值寫進系統記錄。
         if CommandLine.arguments.contains("--log-stats") {
             let logger = Logger(subsystem: "local.sounddeck.app", category: "stats")
-            statsLogTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [engine] _ in
+            statsLogTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [engine, mixer] _ in
                 let status = String(describing: engine.status)
+                let peaks = engine.readSlotPeaks() ?? []
+                let rows = ([mixer.other] + mixer.channels).map { channel in
+                    let peak = channel.slot < peaks.count ? peaks[channel.slot] : 0
+                    return "\(channel.name)#\(channel.slot)=\(String(format: "%.3f", peak))"
+                }
+                logger.notice("mixer \(rows.joined(separator: " "), privacy: .public)")
                 if let stats = engine.readStats() {
                     logger.notice("callbacks=\(stats.callbackCount) peak=\(stats.inputPeak) status=\(status, privacy: .public)")
                 } else {
