@@ -29,8 +29,10 @@ struct RenderState {
     var outLeft: ChannelRef
     var outRight: ChannelRef
 
-    /// 管線末端的線性增益。之後的軟體音量會用到。
-    var gain: Float32 = 1
+    /// 管線末端的目標線性增益（軟體音量）。由 UI 執行緒寫入。
+    var targetGain: Float32 = 1
+    /// 目前實際套用的增益。只由即時執行緒讀寫，每個緩衝區線性滑向 targetGain，避免音量跳變產生雜音。
+    var currentGain: Float32 = 1
 
     // 診斷用。由即時執行緒寫入、UI 執行緒讀取；
     // 目前是單純的對齊整字寫入，M2 加入 DSP 參數傳遞時改為正式的 atomic。
@@ -99,16 +101,20 @@ enum Renderer {
         let dstL = outDataL.assumingMemoryBound(to: Float32.self) + outL.channel
         let dstR = outDataR.assumingMemoryBound(to: Float32.self) + outR.channel
 
-        let gain = state.pointee.gain
+        var gain = state.pointee.currentGain
+        let target = state.pointee.targetGain
+        let gainStep = (target - gain) / Float32(frames)
         var peak: Float32 = 0
         for frame in 0..<frames {
             let left = srcL[frame * inStrideL]
             let right = srcR[frame * inStrideR]
             peak = max(peak, max(abs(left), abs(right)))
+            gain += gainStep
             // 暫時的硬性上限，M2 會換成正式的 Limiter。
             dstL[frame * outStrideL] = min(max(left * gain, -1), 1)
             dstR[frame * outStrideR] = min(max(right * gain, -1), 1)
         }
+        state.pointee.currentGain = target
         state.pointee.inputPeak = max(state.pointee.inputPeak, peak)
 
         // 回授保護：訊號異常暴衝（或出現 NaN）時，丟掉這個緩衝區並鎖住輸出。

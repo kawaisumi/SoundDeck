@@ -35,6 +35,13 @@ enum Log {
 enum HAL {
     static let systemObject = AudioObjectID(kAudioObjectSystemObject)
 
+    /// 我們自己建立的 aggregate device 的 UID 前綴，用來把它們從裝置清單中濾掉。
+    static let aggregateUIDPrefix = "local.sounddeck.aggregate."
+
+    /// 裝置的「虛擬主音量」（'vmvc'）。系統音量鍵用的就是這個屬性；
+    /// 沒有主音量但有個別聲道音量的裝置，系統也會透過它統一控制。
+    static let virtualMainVolume: AudioObjectPropertySelector = 0x766D_7663
+
     static func check(_ status: OSStatus, _ operation: @autoclosure () -> String) throws {
         guard status == noErr else {
             throw CoreAudioError(status: status, operation: operation())
@@ -83,6 +90,51 @@ enum HAL {
         return value.takeRetainedValue() as String
     }
 
+    /// 讀取陣列型屬性。
+    static func readArray<T>(
+        _ object: AudioObjectID,
+        _ selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal,
+        of type: T.Type,
+        _ operation: String
+    ) throws -> [T] {
+        var addr = address(selector, scope: scope)
+        var size: UInt32 = 0
+        try check(AudioObjectGetPropertyDataSize(object, &addr, 0, nil, &size), operation)
+        let count = Int(size) / MemoryLayout<T>.stride
+        guard count > 0 else { return [] }
+        return try [T](unsafeUninitializedCapacity: count) { buffer, initialized in
+            try check(AudioObjectGetPropertyData(object, &addr, 0, nil, &size, buffer.baseAddress!), operation)
+            initialized = Int(size) / MemoryLayout<T>.stride
+        }
+    }
+
+    static func write<T>(
+        _ object: AudioObjectID,
+        _ selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal,
+        value: T,
+        _ operation: String
+    ) throws {
+        var addr = address(selector, scope: scope)
+        var value = value
+        let status = withUnsafePointer(to: &value) {
+            AudioObjectSetPropertyData(object, &addr, 0, nil, UInt32(MemoryLayout<T>.size), $0)
+        }
+        try check(status, operation)
+    }
+
+    static func isSettable(
+        _ object: AudioObjectID,
+        _ selector: AudioObjectPropertySelector,
+        scope: AudioObjectPropertyScope = kAudioObjectPropertyScopeGlobal
+    ) -> Bool {
+        var addr = address(selector, scope: scope)
+        guard AudioObjectHasProperty(object, &addr) else { return false }
+        var settable: DarwinBoolean = false
+        return AudioObjectIsPropertySettable(object, &addr, &settable) == noErr && settable.boolValue
+    }
+
     /// 某個方向（輸入／輸出）上，每個 buffer 各有幾個聲道。
     static func channelLayout(_ device: AudioObjectID, scope: AudioObjectPropertyScope) throws -> [Int] {
         var addr = address(kAudioDevicePropertyStreamConfiguration, scope: scope)
@@ -112,6 +164,53 @@ enum HAL {
             throw CoreAudioError(status: kAudioHardwareBadDeviceError, operation: "取得預設輸出裝置")
         }
         return id
+    }
+
+    /// 所有可以當成輸出的裝置（不含我們自己建立的 aggregate device）。
+    static func outputDeviceIDs() -> [AudioObjectID] {
+        let all = (try? readArray(
+            systemObject, kAudioHardwarePropertyDevices, of: AudioObjectID.self, "列舉裝置"
+        )) ?? []
+        return all.filter { device in
+            guard let layout = try? channelLayout(device, scope: kAudioObjectPropertyScopeOutput),
+                  layout.reduce(0, +) > 0,
+                  let uid = try? deviceUID(device),
+                  !uid.hasPrefix(aggregateUIDPrefix)
+            else { return false }
+            let canBeDefault = (try? read(
+                device, kAudioDevicePropertyDeviceCanBeDefaultDevice,
+                scope: kAudioObjectPropertyScopeOutput, initial: UInt32(1), "讀取可否為預設裝置"
+            )) ?? 1
+            return canBeDefault != 0
+        }
+    }
+
+    static func transportType(_ device: AudioObjectID) -> UInt32 {
+        (try? read(device, kAudioDevicePropertyTransportType, initial: UInt32(0), "讀取連接方式")) ?? 0
+    }
+
+    /// 把系統的預設輸出與提示音輸出都切到指定裝置（與「系統設定」的行為一致）。
+    static func setDefaultOutputDevice(_ device: AudioObjectID) throws {
+        try write(systemObject, kAudioHardwarePropertyDefaultOutputDevice, value: device, "切換預設輸出裝置")
+        try? write(systemObject, kAudioHardwarePropertyDefaultSystemOutputDevice, value: device, "切換提示音輸出裝置")
+    }
+
+    static func hasHardwareVolume(_ device: AudioObjectID) -> Bool {
+        isSettable(device, virtualMainVolume, scope: kAudioObjectPropertyScopeOutput)
+    }
+
+    static func hardwareVolume(_ device: AudioObjectID) -> Float? {
+        try? read(
+            device, virtualMainVolume, scope: kAudioObjectPropertyScopeOutput,
+            initial: Float32(0), "讀取裝置音量"
+        )
+    }
+
+    static func setHardwareVolume(_ device: AudioObjectID, _ volume: Float) throws {
+        try write(
+            device, virtualMainVolume, scope: kAudioObjectPropertyScopeOutput,
+            value: Float32(max(0, min(volume, 1))), "設定裝置音量"
+        )
     }
 
     static func deviceUID(_ device: AudioObjectID) throws -> String {

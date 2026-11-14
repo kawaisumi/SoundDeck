@@ -27,6 +27,7 @@ public struct PipelineStats: Equatable, Sendable {
 /// 然後在 aggregate device 上跑 IOProc。每個使用中的輸出裝置各有一條（README §2.5）。
 final class OutputPipeline {
     let info: PipelineInfo
+    let deviceUID: String
 
     private let tap: ProcessTap
     private let aggregateID: AudioObjectID
@@ -34,7 +35,7 @@ final class OutputPipeline {
     private var isRunning = false
     private let state: UnsafeMutablePointer<RenderState>
 
-    init(outputDevice: AudioObjectID, excluding excludedProcesses: [AudioObjectID]) throws {
+    init(outputDevice: AudioObjectID, excluding excludedProcesses: [AudioObjectID], initialGain: Float) throws {
         let outputUID = try HAL.deviceUID(outputDevice)
         let deviceName = HAL.deviceName(outputDevice)
 
@@ -52,7 +53,7 @@ final class OutputPipeline {
 
         let description: [String: Any] = [
             kAudioAggregateDeviceNameKey: "SoundDeck (\(deviceName))",
-            kAudioAggregateDeviceUIDKey: "local.sounddeck.aggregate.\(UUID().uuidString)",
+            kAudioAggregateDeviceUIDKey: HAL.aggregateUIDPrefix + UUID().uuidString,
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,
             kAudioAggregateDeviceIsStackedKey: false,
@@ -122,8 +123,10 @@ final class OutputPipeline {
 
             let state = UnsafeMutablePointer<RenderState>.allocate(capacity: 1)
             state.initialize(to: RenderState(
-                inLeft: inLeft, inRight: inRight, outLeft: outLeft, outRight: outRight
+                inLeft: inLeft, inRight: inRight, outLeft: outLeft, outRight: outRight,
+                targetGain: initialGain, currentGain: initialGain
             ))
+            self.deviceUID = outputUID
 
             self.tap = tap
             self.aggregateID = aggregateID
@@ -173,6 +176,14 @@ final class OutputPipeline {
         AudioDeviceDestroyIOProcID(aggregateID, procID)
         ioProcID = nil
     }
+
+    /// 設定管線末端的增益（軟體音量）。即時執行緒會平滑地過渡過去。
+    func setGain(_ gain: Float) {
+        state.pointee.targetGain = max(0, min(gain, 1))
+    }
+
+    /// IOProc 至今被呼叫的次數。啟動後應該持續增加。
+    var callbackCount: UInt64 { state.pointee.callbackCount }
 
     /// 回授保護是否已觸發（見 `Renderer.runawayThreshold`）。
     var isTripped: Bool { state.pointee.tripped }
