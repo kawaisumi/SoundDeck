@@ -35,7 +35,12 @@ final class OutputPipeline {
     private var isRunning = false
     private let state: UnsafeMutablePointer<RenderState>
 
-    init(outputDevice: AudioObjectID, excluding excludedProcesses: [AudioObjectID], initialGain: Float) throws {
+    init(
+        outputDevice: AudioObjectID,
+        excluding excludedProcesses: [AudioObjectID],
+        initialGain: Float,
+        equalizer: EQSettings
+    ) throws {
         let outputUID = try HAL.deviceUID(outputDevice)
         let deviceName = HAL.deviceName(outputDevice)
 
@@ -124,7 +129,7 @@ final class OutputPipeline {
             let state = UnsafeMutablePointer<RenderState>.allocate(capacity: 1)
             state.initialize(to: RenderState(
                 inLeft: inLeft, inRight: inRight, outLeft: outLeft, outRight: outRight,
-                targetGain: initialGain, currentGain: initialGain
+                dsp: DSPKernel(sampleRate: info.sampleRate, initialVolume: Double(initialGain))
             ))
             self.deviceUID = outputUID
 
@@ -132,6 +137,8 @@ final class OutputPipeline {
             self.aggregateID = aggregateID
             self.info = info
             self.state = state
+
+            setEqualizer(equalizer)
 
             Log.info(
                 "管線建立：\(deviceName) \(info.sampleRate) Hz，緩衝 \(info.bufferFrames) frames"
@@ -179,7 +186,27 @@ final class OutputPipeline {
 
     /// 設定管線末端的增益（軟體音量）。即時執行緒會平滑地過渡過去。
     func setGain(_ gain: Float) {
-        state.pointee.targetGain = max(0, min(gain, 1))
+        withUnsafeMutablePointer(to: &state.pointee.dsp) {
+            DSPKernel.setVolume($0, Double(gain))
+        }
+    }
+
+    /// 套用 EQ 設定。係數依這條管線的取樣率計算。
+    func setEqualizer(_ settings: EQSettings) {
+        let sampleRate = info.sampleRate
+        var filters: [Biquad] = []
+        var preampDB = 0.0
+        if !settings.isBypassed {
+            filters = settings.bands
+                .filter(\.isEnabled)
+                .prefix(EQSettings.maxBands)
+                .map { Biquad(band: $0, sampleRate: sampleRate) }
+            preampDB = settings.effectivePreampDB(sampleRate: sampleRate)
+        }
+        let preamp = pow(10, preampDB / 20)
+        withUnsafeMutablePointer(to: &state.pointee.dsp) {
+            DSPKernel.update($0, filters: filters, preamp: preamp)
+        }
     }
 
     /// IOProc 至今被呼叫的次數。啟動後應該持續增加。
@@ -202,6 +229,7 @@ final class OutputPipeline {
         stop()
         AudioHardwareDestroyAggregateDevice(aggregateID)
         // IOProc 已停止並銷毀，之後不會再有人碰 state。tap 由屬性釋放時銷毀。
+        state.pointee.dsp.deallocate()
         state.deinitialize(count: 1)
         state.deallocate()
     }

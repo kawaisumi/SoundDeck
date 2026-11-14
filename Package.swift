@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
     name: "SoundDeck",
     defaultLocalization: "zh-Hant",
-    platforms: [.macOS("14.2")],
+    platforms: [.macOS(.v15)],
     targets: [
         // 不依賴 UI 的音訊核心
         .target(
@@ -16,6 +16,11 @@ let package = Package(
             name: "SoundDeck",
             dependencies: ["AudioCore"],
             path: "Sources/App",
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "AudioCoreTests",
+            dependencies: ["AudioCore"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

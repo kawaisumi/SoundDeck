@@ -12,19 +12,36 @@ struct SoundDeckApp: App {
             MenuView()
                 .environmentObject(appDelegate.engine)
                 .environmentObject(appDelegate.devices)
+                .environmentObject(appDelegate.equalizer)
         }
         .menuBarExtraStyle(.window)
+
+        // EQ 編輯器是獨立視窗：Popover 點到外面就會收合，不適合長時間調整。
+        Window("等化器", id: WindowID.equalizer) {
+            EQEditorView()
+                .environmentObject(appDelegate.engine)
+                .environmentObject(appDelegate.equalizer)
+        }
+        .windowResizability(.contentSize)
+        .defaultLaunchBehavior(.suppressed)
+        .restorationBehavior(.disabled)
     }
+}
+
+enum WindowID {
+    static let equalizer = "equalizer"
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let engine: AudioEngine
     let devices: DeviceManager
+    let equalizer: EqualizerController
     private var statsLogTimer: Timer?
 
     override init() {
         engine = AudioEngine()
         devices = DeviceManager(engine: engine)
+        equalizer = EqualizerController(engine: engine)
         super.init()
     }
 

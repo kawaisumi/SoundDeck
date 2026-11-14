@@ -23,6 +23,10 @@ struct MenuView: View {
 
             Divider()
 
+            EqualizerSection()
+
+            Divider()
+
             statusSection
 
             Divider()
@@ -135,6 +139,38 @@ private struct VolumeSection: View {
                     .font(.caption2)
                     .foregroundStyle(.orange)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+// MARK: - 等化器
+
+private struct EqualizerSection: View {
+    @EnvironmentObject private var equalizer: EqualizerController
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("等化器")
+                Spacer()
+                Toggle("啟用等化器", isOn: Binding(
+                    get: { !equalizer.settings.isBypassed },
+                    set: { enabled in equalizer.update { $0.isBypassed = !enabled } }
+                ))
+                .toggleStyle(.switch)
+                .controlSize(.small)
+                .labelsHidden()
+            }
+
+            HStack {
+                EQPresetMenu()
+                Button("編輯…") {
+                    openWindow(id: WindowID.equalizer)
+                    // 選單列 App 預設不會成為前景，不拉到前面的話視窗會被其他 App 蓋住。
+                    NSApplication.shared.activate(ignoringOtherApps: true)
+                }
             }
         }
     }

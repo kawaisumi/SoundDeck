@@ -19,7 +19,7 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>zh-Hant</string>
     <key>LSMinimumSystemVersion</key>
-    <string>14.2</string>
+    <string>15.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>NSPrincipalClass</key>

@@ -26,6 +26,7 @@ public final class AudioEngine: ObservableObject {
     private let workQueue = DispatchQueue(label: "local.sounddeck.engine")
     private let lock = NSLock()
     private var pipeline: OutputPipeline? // 由 lock 保護
+    private var equalizer = EQSettings.flat // 由 lock 保護
 
     /// 每次從外部要求重建就加一，用來作廢過期的延遲重建與重試。
     private var generation = 0
@@ -95,6 +96,14 @@ public final class AudioEngine: ObservableObject {
         }
     }
 
+    /// 套用 EQ 設定。沒有管線時先記著，管線建立時會帶進去。
+    func setEqualizer(_ settings: EQSettings) {
+        lock.lock()
+        defer { lock.unlock() }
+        equalizer = settings
+        pipeline?.setEqualizer(settings)
+    }
+
     // MARK: - 管線生命週期
 
     private func takePipeline() -> OutputPipeline? {
@@ -148,11 +157,19 @@ public final class AudioEngine: ObservableObject {
                 }
                 // 裝置有硬體音量就不在軟體端衰減；沒有的話套用記住的軟體音量。
                 let gain = HAL.hasHardwareVolume(device) ? 1 : SoftwareVolumeStore.gain(forUID: uid)
-                let newPipeline = try OutputPipeline(outputDevice: device, excluding: [ownProcess], initialGain: gain)
+                self.lock.lock()
+                let equalizer = self.equalizer
+                self.lock.unlock()
+                let newPipeline = try OutputPipeline(
+                    outputDevice: device, excluding: [ownProcess],
+                    initialGain: gain, equalizer: equalizer
+                )
                 try newPipeline.start()
 
                 self.lock.lock()
                 self.pipeline = newPipeline
+                // 建立期間設定可能又被改過，補套一次最新的。
+                newPipeline.setEqualizer(self.equalizer)
                 self.lock.unlock()
                 self.publish(.running(newPipeline.info), generation: generation)
             } catch {

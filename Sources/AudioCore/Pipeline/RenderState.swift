@@ -29,13 +29,11 @@ struct RenderState {
     var outLeft: ChannelRef
     var outRight: ChannelRef
 
-    /// 管線末端的目標線性增益（軟體音量）。由 UI 執行緒寫入。
-    var targetGain: Float32 = 1
-    /// 目前實際套用的增益。只由即時執行緒讀寫，每個緩衝區線性滑向 targetGain，避免音量跳變產生雜音。
-    var currentGain: Float32 = 1
+    /// 前級、EQ、Limiter、音量。
+    var dsp: DSPKernel
 
-    // 診斷用。由即時執行緒寫入、UI 執行緒讀取；
-    // 目前是單純的對齊整字寫入，M2 加入 DSP 參數傳遞時改為正式的 atomic。
+    // 診斷用。由即時執行緒寫入、UI 執行緒讀取，沒有同步：
+    // 都是單一對齊整字的寫入，讀到稍舊的值也無妨。會影響聲音的參數則走 DSPKernel 的鎖。
     var callbackCount: UInt64 = 0
     var inputPeak: Float32 = 0
 
@@ -48,7 +46,7 @@ enum Renderer {
     /// 正常的浮點音訊即使超過 0 dBFS 也不會到這個程度。
     static let runawayThreshold: Float32 = 4
 
-    /// IOProc 本體：把 tap 的立體聲複製到輸出裝置的左右聲道。
+    /// IOProc 本體：把 tap 的立體聲複製到輸出裝置的左右聲道，再就地做訊號處理。
     /// 必須保持即時安全：不配置記憶體、不上鎖、不呼叫會阻塞的東西。
     @inline(__always)
     static func render(
@@ -101,23 +99,18 @@ enum Renderer {
         let dstL = outDataL.assumingMemoryBound(to: Float32.self) + outL.channel
         let dstR = outDataR.assumingMemoryBound(to: Float32.self) + outR.channel
 
-        var gain = state.pointee.currentGain
-        let target = state.pointee.targetGain
-        let gainStep = (target - gain) / Float32(frames)
         var peak: Float32 = 0
         for frame in 0..<frames {
             let left = srcL[frame * inStrideL]
             let right = srcR[frame * inStrideR]
             peak = max(peak, max(abs(left), abs(right)))
-            gain += gainStep
-            // 暫時的硬性上限，M2 會換成正式的 Limiter。
-            dstL[frame * outStrideL] = min(max(left * gain, -1), 1)
-            dstR[frame * outStrideR] = min(max(right * gain, -1), 1)
+            dstL[frame * outStrideL] = left
+            dstR[frame * outStrideR] = right
         }
-        state.pointee.currentGain = target
         state.pointee.inputPeak = max(state.pointee.inputPeak, peak)
 
         // 回授保護：訊號異常暴衝（或出現 NaN）時，丟掉這個緩衝區並鎖住輸出。
+        // 要在訊號處理之前檢查，否則 NaN 會進到濾波器的狀態裡。
         if !(peak <= runawayThreshold) {
             state.pointee.tripped = true
             for buffer in outList {
@@ -125,6 +118,13 @@ enum Renderer {
                     memset(data, 0, Int(buffer.mDataByteSize))
                 }
             }
+            return
         }
+
+        state.pointee.dsp.process(
+            left: dstL, leftStride: outStrideL,
+            right: dstR, rightStride: outStrideR,
+            frames: frames
+        )
     }
 }
