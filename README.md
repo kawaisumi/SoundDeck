@@ -250,7 +250,9 @@ eqMac/
 ├── Tests/
 │   └── AudioCoreTests/            # DSP 係數、頻率響應、Limiter、參數切換
 ├── Resources/
-│   └── Info.plist                 # LSUIElement、NSAudioCaptureUsageDescription
+│   ├── Info.plist                 # LSUIElement、NSAudioCaptureUsageDescription
+│   ├── AppIcon.icns               # App 圖示（由 Scripts/make-icon.sh 產生）
+│   └── AppIcon-preview.png        # 圖示的 1024×1024 預覽圖
 └── Scripts/
     └── bundle.sh                  # swift build → 組裝 .app → 簽章
 ```
@@ -355,8 +357,12 @@ open build/SoundDeck.app
 ### 安裝
 
 ```
-./Scripts/install.sh       # 建置、安裝到 /Applications 並啟動
+./Scripts/make-dmg.sh      # 打包成 build/SoundDeck-<版本>.dmg，打開後把 App 拖到「應用程式」
+./Scripts/install.sh       # 或者：直接建置、安裝到 /Applications 並啟動（開發時比較快）
 ```
+
+.dmg 只適合在這台 Mac 上使用：App 是用本機的自簽憑證簽章、沒有經過 Apple 公證，
+拿到別台 Mac 會被 Gatekeeper 擋下。要給別人用需要 Apple Developer 帳號來簽章與公證。
 
 「開機時自動啟動」記的是 App 的位置。從 `build/` 執行時開啟這個選項，重新建置或搬動後可能失效，
 所以日常使用建議跑安裝到 `/Applications` 的版本。錄音權限綁的是簽章而不是位置，安裝後不需要重新授權。
