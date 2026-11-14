@@ -27,6 +27,8 @@ public final class MixerController: ObservableObject {
     @Published public private(set) var other: MixerChannel
     /// 「依 App 指定輸出裝置」的總開關。關閉時所有 App 都走系統預設輸出，已指定的關係保留但不生效。
     @Published public private(set) var isPerAppRoutingEnabled: Bool
+    /// 是否有任何 App（包含目前沒在發聲、不在清單上的）被指定了輸出裝置。
+    @Published public private(set) var hasDeviceAssignments = false
 
     public static let volumeRange: ClosedRange<Float> = 0...2
     public static let otherID = "__other__"
@@ -94,6 +96,18 @@ public final class MixerController: ObservableObject {
         modify(id) { $0.deviceUID = deviceUID }
     }
 
+    /// 一鍵還原：清除所有 App 的指定，全部回到跟隨系統預設。音量與靜音設定不受影響。
+    public func resetAllDevices() {
+        guard hasDeviceAssignments else { return }
+        for (id, entry) in saved where entry.deviceUID != nil {
+            var cleared = entry
+            cleared.deviceUID = nil
+            saved[id] = cleared.isDefault ? nil : cleared
+        }
+        persist()
+        refresh()
+    }
+
     public func setPerAppRoutingEnabled(_ enabled: Bool) {
         guard enabled != isPerAppRoutingEnabled else { return }
         isPerAppRoutingEnabled = enabled
@@ -111,10 +125,14 @@ public final class MixerController: ObservableObject {
         change(&entry)
         guard entry != saved[id] ?? Saved() else { return }
         saved[id] = entry.isDefault ? nil : entry
+        persist()
+        refresh()
+    }
+
+    private func persist() {
         if let data = try? JSONEncoder().encode(saved) {
             UserDefaults.standard.set(data, forKey: Self.defaultsKey)
         }
-        refresh()
     }
 
     // MARK: - 狀態同步
@@ -180,6 +198,8 @@ public final class MixerController: ObservableObject {
         newOther.volume = otherSaved.volume
         newOther.isMuted = otherSaved.isMuted
         if newOther != other { other = newOther }
+        let assigned = saved.values.contains { $0.deviceUID != nil }
+        if assigned != hasDeviceAssignments { hasDeviceAssignments = assigned }
     }
 
     /// 滑桿位置 → 線性增益。100% 以下用平方曲線（手感接近聽覺上的響度），

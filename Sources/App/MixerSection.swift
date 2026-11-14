@@ -23,6 +23,17 @@ struct MixerSection: View {
                 .help("開啟後可以讓各 App 從不同的輸出裝置播放；關閉時全部走系統預設輸出，已指定的設定會保留。")
             }
 
+            if mixer.isPerAppRoutingEnabled, mixer.hasDeviceAssignments {
+                Button {
+                    mixer.resetAllDevices()
+                } label: {
+                    Label("全部還原為系統預設", systemImage: "arrow.uturn.backward")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderless)
+                .help("清除所有 App 的指定裝置，全部改回跟隨系統預設輸出。各 App 的音量與靜音不受影響。")
+            }
+
             // 只有 Popover 開著時這個 view 才存在，所以收起來時不會輪詢電平。
             TimelineView(.periodic(from: .now, by: 0.1)) { _ in
                 let peaks = mixer.readPeaks()
