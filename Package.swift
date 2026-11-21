@@ -2,7 +2,7 @@
 import PackageDescription
 
 let package = Package(
-    name: "SoundDeck",
+    name: "Tonefleur",
     defaultLocalization: "zh-Hant",
     platforms: [.macOS(.v15)],
     dependencies: [
@@ -17,7 +17,7 @@ let package = Package(
         ),
         // 選單列 App
         .executableTarget(
-            name: "SoundDeck",
+            name: "Tonefleur",
             dependencies: [
                 "AudioCore",
                 .product(name: "Sparkle", package: "Sparkle"),

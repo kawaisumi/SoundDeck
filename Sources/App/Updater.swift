@@ -4,9 +4,9 @@ import Sparkle
 
 /// 自動更新（Sparkle）。檢查 Info.plist 的 `SUFeedURL` 指向的 appcast，有新版時提示下載安裝。
 ///
-/// SoundDeck 唯一會連網的地方就是這裡：檢查更新時下載 appcast.xml，有新版時下載 dmg。
+/// Tonefleur 唯一會連網的地方就是這裡：檢查更新時下載 appcast.xml，有新版時下載 dmg。
 /// 不會傳送任何系統資訊（Info.plist 的 SUEnableSystemProfiling 為 false）。
-/// 使用者關掉「自動檢查更新」後，除非手動按「檢查更新…」，SoundDeck 完全不會連網。
+/// 使用者關掉「自動檢查更新」後，除非手動按「檢查更新…」，Tonefleur 完全不會連網。
 ///
 /// 更新檔用 EdDSA 金鑰簽章，Info.plist 的 `SUPublicEDKey` 是對應的公鑰。還沒設定金鑰時
 /// （開發中、或自己建置的版本）不啟動更新器，避免 Sparkle 一啟動就跳出錯誤視窗。

@@ -1,2 +1,2 @@
 /* Info.plist 裡顯示給使用者的文字（英文）。 */
-"NSAudioCaptureUsageDescription" = "SoundDeck captures system audio to apply the equalizer and adjust each app's volume. Audio is processed live on this Mac and is never recorded or sent anywhere.";
+"NSAudioCaptureUsageDescription" = "Tonefleur captures system audio to apply the equalizer and adjust each app's volume. Audio is processed live on this Mac and is never recorded or sent anywhere.";

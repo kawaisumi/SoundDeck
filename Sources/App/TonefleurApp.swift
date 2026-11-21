@@ -5,11 +5,11 @@ import os
 import SwiftUI
 
 @main
-struct SoundDeckApp: App {
+struct TonefleurApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        MenuBarExtra("SoundDeck", systemImage: "slider.vertical.3") {
+        MenuBarExtra("Tonefleur", systemImage: "slider.vertical.3") {
             MenuView()
                 .environmentObject(appDelegate.engine)
                 .environmentObject(appDelegate.devices)
@@ -163,7 +163,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             window.orderFrontRegardless()
             previewWindows.append(window)
         }
-        show("SoundDeck", MenuView(), at: NSPoint(x: 60, y: 900))
+        show("Tonefleur", MenuView(), at: NSPoint(x: 60, y: 900))
         show(L("等化器"), EQEditorView(), at: NSPoint(x: 420, y: 900))
 
         // --preview-snapshot <資料夾>：幾秒後把兩個視窗的畫面存成 PNG（不需要螢幕錄製權限）。

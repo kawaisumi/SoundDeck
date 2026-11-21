@@ -9,7 +9,7 @@ struct MenuView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Text("SoundDeck").font(.headline)
+                Text("Tonefleur").font(.headline)
                 Spacer()
                 Toggle("啟用音訊處理", isOn: enabledBinding)
                     .toggleStyle(.switch)
@@ -122,7 +122,7 @@ private struct FooterSection: View {
                 Button("結束") {
                     NSApplication.shared.terminate(nil)
                 }
-                .help("結束 SoundDeck，聲音會恢復成系統原本的輸出。")
+                .help("結束 Tonefleur，聲音會恢復成系統原本的輸出。")
             }
 
             if updater.isConfigured {
@@ -132,7 +132,7 @@ private struct FooterSection: View {
                 ))
                 .toggleStyle(.checkbox)
                 .font(.callout)
-                .help("每天向 GitHub 檢查一次有沒有新版本。這是 SoundDeck 唯一會連網的功能；關閉後，除非你手動按「檢查更新…」，SoundDeck 完全不會連網。")
+                .help("每天向 GitHub 檢查一次有沒有新版本。這是 Tonefleur 唯一會連網的功能；關閉後，除非你手動按「檢查更新…」，Tonefleur 完全不會連網。")
             }
 
             HStack(spacing: 6) {
@@ -222,7 +222,7 @@ private struct VolumeSection: View {
     }
 }
 
-/// 左右聲道平衡。在 SoundDeck 的管線裡處理，所以只有音訊處理運作中才能調整。
+/// 左右聲道平衡。在 Tonefleur 的管線裡處理，所以只有音訊處理運作中才能調整。
 private struct BalanceRow: View {
     @EnvironmentObject private var devices: DeviceManager
     let isAvailable: Bool

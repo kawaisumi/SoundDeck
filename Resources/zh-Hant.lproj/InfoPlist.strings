@@ -1,2 +1,2 @@
 /* Info.plist 裡顯示給使用者的文字（繁體中文）。 */
-"NSAudioCaptureUsageDescription" = "SoundDeck 需要擷取系統音訊，才能套用等化器並調整各 App 的音量。音訊只在本機即時處理，不會錄製或傳送。";
+"NSAudioCaptureUsageDescription" = "Tonefleur 需要擷取系統音訊，才能套用等化器並調整各 App 的音量。音訊只在本機即時處理，不會錄製或傳送。";

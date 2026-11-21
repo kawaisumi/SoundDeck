@@ -76,7 +76,7 @@ public enum EQTextFormat {
         }
 
         if skippedForLimit > 0 {
-            result.warnings.append(L("SoundDeck 最多 %d 個頻段，後面 %d 個沒有匯入。", EQSettings.maxBands, skippedForLimit))
+            result.warnings.append(L("Tonefleur 最多 %d 個頻段，後面 %d 個沒有匯入。", EQSettings.maxBands, skippedForLimit))
         }
         guard !result.bands.isEmpty else { throw ParseError.noFilters }
         return result
@@ -95,7 +95,7 @@ public enum EQTextFormat {
             return .skipped(L("%@：看不懂這一行，已略過。", label))
         }
         guard let kind = kind(forCode: code) else {
-            return .skipped(L("%@：SoundDeck 不支援「%@」類型，已略過。", label, code))
+            return .skipped(L("%@：Tonefleur 不支援「%@」類型，已略過。", label, code))
         }
         guard let frequencyText = firstMatch(#"\bFc\s+([0-9]*\.?[0-9]+)\s*(?:Hz)?"#, in: line),
               let frequency = Double(frequencyText)
@@ -199,7 +199,7 @@ public enum EQTextFormat {
         """
     }
 
-    /// 給 AI 的提示詞範本。使用者填好括號裡的內容後貼給 AI，再把 AI 的回覆貼回 SoundDeck 匯入。
+    /// 給 AI 的提示詞範本。使用者填好括號裡的內容後貼給 AI，再把 AI 的回覆貼回 Tonefleur 匯入。
     /// 整段依介面語言換成中文或英文版，AI 回覆的語言通常會跟著範本走。
     /// - Parameters:
     ///   - deviceName: 目前正在調的輸出裝置名稱，預先填進範本。
@@ -215,7 +215,7 @@ public enum EQTextFormat {
                 ?? "(e.g. soundbar model, headphone model, MacBook built-in speakers)"
             var prompt = """
             Act as an audio tuning engineer. Based on my listening habits, design a parametric EQ \
-            for "SoundDeck", an equalizer app for macOS.
+            for "Tonefleur", an equalizer app for macOS.
 
             [My listening setup]
             - Playback device: \(device)
@@ -229,7 +229,7 @@ public enum EQTextFormat {
             - Frequency 20–20000 Hz; gain −18 to +18 dB (write 0 for HP, LP and NO); Q 0.1–18
             - Prefer gentle corrections; keep each band within ±6 dB if possible
             - Respect the physical limits of the playback device, e.g. don't boost sub-bass that small speakers can't reproduce
-            - Set Preamp to the negative of the highest point of the overall curve to avoid clipping (SoundDeck also compensates automatically)
+            - Set Preamp to the negative of the highest point of the overall curve to avoid clipping (Tonefleur also compensates automatically)
 
             [Output format]
             Put the settings in a single code block, following the example below exactly \
@@ -257,7 +257,7 @@ public enum EQTextFormat {
         case .chinese:
             let device = deviceName.map { "\($0)（若知道確切型號請改成型號）" } ?? "（例如：soundbar 型號、耳機型號、MacBook 內建喇叭）" // 不翻譯
             var prompt = """
-            請你擔任音響調校工程師，依照我的聆聽習慣，為 macOS 的等化器 App「SoundDeck」設計一組參數式 EQ。
+            請你擔任音響調校工程師，依照我的聆聽習慣，為 macOS 的等化器 App「Tonefleur」設計一組參數式 EQ。
 
             【我的聆聽環境】
             - 播放裝置：\(device)
@@ -271,7 +271,7 @@ public enum EQTextFormat {
             - 頻率 20–20000 Hz；增益 −18 到 +18 dB（HP、LP、NO 的增益寫 0）；Q 值 0.1–18
             - 以小幅修正為主，單一頻段建議不超過 ±6 dB
             - 請考慮播放裝置的物理限制，例如小喇叭發不出的超低頻不要硬加
-            - Preamp 寫成整體曲線最高點的負值，避免破音（SoundDeck 也會自動補償）
+            - Preamp 寫成整體曲線最高點的負值，避免破音（Tonefleur 也會自動補償）
 
             【輸出格式】
             請把參數放在一個程式碼區塊裡，格式必須完全照下面的範例（Equalizer APO／AutoEQ 的 ParametricEQ 格式），

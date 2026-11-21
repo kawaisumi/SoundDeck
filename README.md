@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="Resources/AppIcon-preview.png" width="128" alt="SoundDeck 圖示">
+  <img src="Resources/AppIcon-preview.png" width="128" alt="Tonefleur 圖示">
 </p>
 
-<h1 align="center">SoundDeck</h1>
+<h1 align="center">Tonefleur</h1>
 
 <p align="center">
   macOS 選單列音訊工具：系統等化器、依 App 混音、輸出裝置管理。<br>
-  不需要安裝任何音訊驅動程式。
+  不需要安裝任何音訊驅動程式。<br>
+  <sub>原名 SoundDeck</sub>
 </p>
 
 ---
@@ -29,7 +30,7 @@
 | **其他** | 開機自動啟動、休眠喚醒後自動恢復、音量異常暴衝時自動停用 |
 
 介面有繁體中文與英文，依系統語言自動切換；其他語言的系統會顯示英文。
-也可以在「系統設定 → 一般 → 語言與地區 → 應用程式」單獨指定 SoundDeck 的語言。
+也可以在「系統設定 → 一般 → 語言與地區 → 應用程式」單獨指定 Tonefleur 的語言。
 
 ## 系統需求
 
@@ -40,17 +41,17 @@
 
 ### 下載安裝
 
-1. 到本專案的 [Releases](../../releases) 頁面下載最新的 `SoundDeck-<版本>.dmg`。
-2. 打開 dmg，把 **SoundDeck** 拖到「**應用程式**」資料夾。
-3. 從「應用程式」打開 SoundDeck。第一次會被系統擋下，顯示「Apple 無法驗證……」，這是正常的（原因見下方說明）：
+1. 到本專案的 [Releases](../../releases) 頁面下載最新的 `Tonefleur-<版本>.dmg`。
+2. 打開 dmg，把 **Tonefleur** 拖到「**應用程式**」資料夾。
+3. 從「應用程式」打開 Tonefleur。第一次會被系統擋下，顯示「Apple 無法驗證……」，這是正常的（原因見下方說明）：
    1. 按「完成」關掉提示。
-   2. 打開「**系統設定 → 隱私權與安全性**」，捲到最下面，在 SoundDeck 的訊息旁按「**仍要打開**」（Open Anyway），再輸入登入密碼確認。
+   2. 打開「**系統設定 → 隱私權與安全性**」，捲到最下面，在 Tonefleur 的訊息旁按「**仍要打開**」（Open Anyway），再輸入登入密碼確認。
    3. 之後就可以正常打開，不會再出現這個提示。
-4. 系統會詢問是否允許 SoundDeck 錄製**系統音訊**，請按「允許」。沒有這個權限就無法處理聲音，
-   原因與 SoundDeck 如何使用它，見下方的[隱私](#隱私)。
-5. 選單列出現 SoundDeck 的圖示（三條垂直推桿）就代表開始運作了。
+4. 系統會詢問是否允許 Tonefleur 錄製**系統音訊**，請按「允許」。沒有這個權限就無法處理聲音，
+   原因與 Tonefleur 如何使用它，見下方的[隱私](#隱私)。
+5. 選單列出現 Tonefleur 的圖示（三條垂直推桿）就代表開始運作了。
 
-之後有新版本時，SoundDeck 會自動提示，按「安裝更新」即可，不需要再重新下載 dmg。
+之後有新版本時，Tonefleur 會自動提示，按「安裝更新」即可，不需要再重新下載 dmg。
 也可以在控制面板底部按「檢查更新…」。
 
 > **為什麼會被擋？** 這個 App 沒有經過 Apple 公證（需要付費的 Apple Developer 帳號），
@@ -59,18 +60,18 @@
 > 如果找不到「仍要打開」，也可以在「終端機」執行下面這行解除隔離標記，再打開 App：
 >
 > ```bash
-> xattr -dr com.apple.quarantine /Applications/SoundDeck.app
+> xattr -dr com.apple.quarantine /Applications/Tonefleur.app
 > ```
 
 ## 隱私
 
-SoundDeck 需要「螢幕與系統音訊錄製」權限，看起來像是會錄音，所以這裡說清楚它做什麼、不做什麼。
+Tonefleur 需要「螢幕與系統音訊錄製」權限，看起來像是會錄音，所以這裡說清楚它做什麼、不做什麼。
 
 **為什麼需要這個權限**：等化器和混音器要先拿到各 App 的聲音，才能調整後再播出來。macOS 規定，
 任何要讀取別的 App 聲音的程式都必須取得這類權限，同類的系統等化器工具也都一樣
 （改用虛擬音訊驅動的做法，則是改要麥克風權限）。
 
-**SoundDeck 不會做的事**
+**Tonefleur 不會做的事**
 
 - 不會把聲音存成檔案。聲音只在記憶體裡即時處理，處理完就直接送到喇叭。
 - 不會把聲音或任何個人資料傳到網路上。
@@ -78,17 +79,17 @@ SoundDeck 需要「螢幕與系統音訊錄製」權限，看起來像是會錄�
 
 **唯一會連網的功能是自動更新**：每天向 GitHub 下載一次 `appcast.xml` 檢查有沒有新版，
 有新版時再從 GitHub Releases 下載 dmg。不會附帶任何系統資訊（已關閉 Sparkle 的系統資訊回報）。
-在控制面板底部取消「自動檢查更新」後，除非你手動按「檢查更新…」，SoundDeck 完全不會連網。
+在控制面板底部取消「自動檢查更新」後，除非你手動按「檢查更新…」，Tonefleur 完全不會連網。
 
 **怎麼自己確認**
 
 - 程式碼全部公開。和網路有關的只有 [`Sources/App/Updater.swift`](Sources/App/Updater.swift) 裡呼叫 Sparkle 的部分；
   其餘程式碼沒有任何連網或寫入音訊檔的程式。
 - 可以用 [LuLu](https://objective-see.org/products/lulu.html)、Little Snitch 這類防火牆觀察：
-  SoundDeck 只會連到 `raw.githubusercontent.com`（檢查更新）與 `github.com`（下載更新）。
+  Tonefleur 只會連到 `raw.githubusercontent.com`（檢查更新）與 `github.com`（下載更新）。
 - 可以從原始碼自己建置，或比對 Release 附上的 SHA-256 校驗碼，確認下載的檔案沒有被改過。
 - 權限隨時可以在「系統設定 → 隱私權與安全性 → 螢幕與系統音訊錄製」關閉。
-  關閉後 SoundDeck 收不到任何聲音，聲音會直接照原本的方式播放。
+  關閉後 Tonefleur 收不到任何聲音，聲音會直接照原本的方式播放。
 
 ### 從原始碼建置
 
@@ -96,7 +97,7 @@ SoundDeck 需要「螢幕與系統音訊錄製」權限，看起來像是會錄�
 
 ```bash
 git clone <這個 repo 的網址>
-cd SoundDeck
+cd Tonefleur
 ./Scripts/install.sh        # 建置、安裝到「應用程式」並啟動
 ```
 
@@ -104,9 +105,9 @@ cd SoundDeck
 
 ## 使用方式
 
-點選單列的 SoundDeck 圖示打開控制面板：
+點選單列的 Tonefleur 圖示打開控制面板：
 
-- **右上角開關**：整個 SoundDeck 的總開關。關閉後聲音直接輸出，不經過任何處理。
+- **右上角開關**：整個 Tonefleur 的總開關。關閉後聲音直接輸出，不經過任何處理。
 - **主音量**：目前輸出裝置的音量。裝置本身沒有音量控制時（例如 HDMI 螢幕）會自動改用軟體音量。
 - **平衡**：主音量下方的 L／R 滑桿，按右邊的文字回到置中。
 - **輸出裝置**：點一下切換系統輸出。
@@ -136,14 +137,14 @@ Filter 3: ON HSC Fc 9000 Hz Gain 2.0 dB Q 0.71
 **耳機校正（AutoEQ）**：AutoEQ 依量測資料替數千款耳機算好了「把頻率響應拉平」的 EQ。
 到 [AutoEQ 的 results 資料夾](https://github.com/jaakkopasanen/AutoEq/tree/master/results)找到你的耳機型號，
 下載 `<型號> ParametricEQ.txt`，在匯入視窗按「選擇檔案…」。AutoEQ 提供的本來就是參數式 EQ，
-SoundDeck 會照原始數值套用，不需要轉換成固定頻段。
+Tonefleur 會照原始數值套用，不需要轉換成固定頻段。
 
 **請 AI 幫你調**：
 
-1. 在匯入視窗按「**複製給 AI 的範本**」。範本已經寫好 SoundDeck 能接受的格式與數值範圍，
+1. 在匯入視窗按「**複製給 AI 的範本**」。範本已經寫好 Tonefleur 能接受的格式與數值範圍，
    也會帶入目前的裝置名稱；如果你已經調過 EQ，也會附上目前的設定讓 AI 在這個基礎上修改。
 2. 貼給 ChatGPT、Claude 等 AI，把括號裡的內容改成你的播放裝置、常聽的音樂和想要的效果。
-3. 把 AI 的**整段回覆**貼回匯入視窗（或按「從剪貼簿貼上」）。SoundDeck 只讀取格式正確的那幾行，其他說明文字會自動略過。
+3. 把 AI 的**整段回覆**貼回匯入視窗（或按「從剪貼簿貼上」）。Tonefleur 只讀取格式正確的那幾行，其他說明文字會自動略過。
 4. 確認預覽沒問題後，按「套用」或「套用並存為預設組」。
 
 匯入時超出範圍的數值會被調整到範圍內、不支援的濾波器類型會略過，預覽中都會列出。
@@ -155,7 +156,7 @@ SoundDeck 會照原始數值套用，不需要轉換成固定頻段。
 
 ### 整體流程
 
-SoundDeck 不安裝虛擬音訊裝置，而是用 macOS 14.2 起提供的 **Core Audio Process Tap** 攔截各 App 的聲音，
+Tonefleur 不安裝虛擬音訊裝置，而是用 macOS 14.2 起提供的 **Core Audio Process Tap** 攔截各 App 的聲音，
 處理後再從實體裝置播出：
 
 ```mermaid
@@ -184,7 +185,7 @@ flowchart TB
 ```
 
 1. **攔截**：每個 tap 會攔截指定 process「送往某個輸出裝置」的聲音，並在讀取期間把原聲靜音。
-   SoundDeck 停止讀取（關閉、當掉）時，系統聲音會自動恢復原本的直接輸出，不會變成沒聲音。
+   Tonefleur 停止讀取（關閉、當掉）時，系統聲音會自動恢復原本的直接輸出，不會變成沒聲音。
 2. **槽位**：每條管線固定掛 13 個 tap。槽位 1–12 各給一個 App；槽位 0 用「排除模式」，
    收所有沒有被分配的聲音，所以 EQ 仍然作用在全部聲音上。
 3. **處理**：建立一個 private aggregate device（子裝置是實體喇叭，tap 是它的輸入），
@@ -207,14 +208,14 @@ flowchart LR
     P2 --> HP["🎧 耳機"]
 ```
 
-- **主管線**接在系統預設輸出上，SoundDeck 啟用時一定存在。
+- **主管線**接在系統預設輸出上，Tonefleur 啟用時一定存在。
 - **次管線**在有 App 被指定到其他裝置時才建立，沒有 App 用到時自動拆除。
 - 每條管線有自己的 EQ，這就是「每個裝置各自的 EQ」的由來。
 - App 在管線之間搬移時採「新的先接手、舊的再放掉」，寧可一瞬間重疊也不讓原聲漏出。
 
 ### 為什麼不用虛擬音訊驅動
 
-| | 虛擬音訊驅動 | Core Audio Process Tap（SoundDeck） |
+| | 虛擬音訊驅動 | Core Audio Process Tap（Tonefleur） |
 |---|---|---|
 | 安裝 | 要用管理員權限安裝驅動、重啟音訊服務 | 不用安裝任何東西，只要允許錄音權限 |
 | 依 App 分離 | 驅動要自己辨識是哪個 App | API 本身就能指定 process |
@@ -293,7 +294,7 @@ IOProc 跑在即時音訊執行緒上，不能配置記憶體、不能等待鎖�
   裝置回報的配置不完整時，立體聲視為左右，6／8 聲道視為標準的 5.1／7.1 排列。
 - **頻譜**：顯示所有聲道的平均。
 
-裝置是立體聲時，播放 5.1 內容的 App 或 macOS 會先自行降混再送出，這一步發生在 SoundDeck 之前，與是否使用 SoundDeck 無關。
+裝置是立體聲時，播放 5.1 內容的 App 或 macOS 會先自行降混再送出，這一步發生在 Tonefleur 之前，與是否使用 Tonefleur 無關。
 
 </details>
 
@@ -301,7 +302,7 @@ IOProc 跑在即時音訊執行緒上，不能配置記憶體、不能等待鎖�
 
 - 支援多聲道輸出裝置（5.1、7.1 等，最多 16 聲道），但目前只用模擬的 5.1 裝置做過測試，還沒有在實際的環繞音響上驗證。
 - 播放器把 Dolby Digital、DTS、Atmos 等**原始編碼資料直接傳給擴大機**（passthrough）時，那是壓縮過的資料而不是聲音波形，
-  SoundDeck 無法處理，任何系統等化器都一樣。
+  Tonefleur 無法處理，任何系統等化器都一樣。
 - 同時最多 12 個 App 有自己的一列，超過的會併入「系統音效與其他」。
 - 每條管線有 13 個 tap，同時使用的輸出裝置越多，系統音訊服務（`coreaudiod`）的負擔越大。
 - 被指定的裝置若沒有硬體音量，只有在它是系統預設輸出時才能調它的主音量（指定過去的 App 可以用自己那一列的滑桿調）。
@@ -309,7 +310,7 @@ IOProc 跑在即時音訊執行緒上，不能配置記憶體、不能等待鎖�
 - 部分 HDMI 裝置的管線啟動時間不穩定（從不到 1 秒到 20 秒以上都有），目前靠自動重試恢復，原因未查明。
 - 少數專業錄音介面把聲道分在多個串流上，目前只處理第一個串流。
 - 與其他會攔截或轉送系統聲音的工具（其他系統等化器、音訊路由工具）同時使用沒有意義，建議擇一。
-- 左右平衡在 SoundDeck 的管線裡處理，音訊處理關閉時不會作用。
+- 左右平衡在 Tonefleur 的管線裡處理，音訊處理關閉時不會作用。
 - 自動更新只在 Sparkle 的流程上做過測試，還沒有經過一次真正的「舊版收到通知並更新成新版」。
 
 ## 開發
@@ -317,7 +318,7 @@ IOProc 跑在即時音訊執行緒上，不能配置記憶體、不能等待鎖�
 ### 專案結構
 
 ```
-SoundDeck/
+Tonefleur/
 ├── Package.swift
 ├── Sources/
 │   ├── AudioCore/                 # 不依賴 UI 的音訊核心
@@ -340,9 +341,9 @@ SoundDeck/
 
 | 指令 | 用途 |
 |---|---|
-| `./Scripts/bundle.sh [release\|debug]` | 建置並組裝 `build/SoundDeck.app`。release 為 Apple 晶片＋Intel 的 universal 版本 |
+| `./Scripts/bundle.sh [release\|debug]` | 建置並組裝 `build/Tonefleur.app`。release 為 Apple 晶片＋Intel 的 universal 版本 |
 | `./Scripts/install.sh` | 建置、安裝到 `/Applications` 並啟動 |
-| `./Scripts/make-dmg.sh` | 打包成 `build/SoundDeck-<版本>.dmg` |
+| `./Scripts/make-dmg.sh` | 打包成 `build/Tonefleur-<版本>.dmg` |
 | `./Scripts/set-version.sh <版本號>` | 設定版本號，並把建置編號加一 |
 | `./Scripts/setup-updates.sh` | 建立自動更新用的簽章金鑰（只需執行一次） |
 | `./Scripts/release.sh` | 打包、替更新檔簽章，並更新 `appcast.xml` |
@@ -361,7 +362,7 @@ macOS 的錄音權限綁定程式簽章。沒有憑證時 `bundle.sh` 會用 ad-
 ```
 
 它會建立一張只在本機有效、只信任於「程式碼簽章」用途的自簽憑證（過程中系統會要求輸入登入密碼），
-之後 `bundle.sh` 會自動使用它。也可以用環境變數 `SOUNDDECK_SIGN_IDENTITY` 指定其他憑證。
+之後 `bundle.sh` 會自動使用它。也可以用環境變數 `TONEFLEUR_SIGN_IDENTITY` 指定其他憑證。
 
 ### 自動更新的運作方式
 
@@ -379,8 +380,8 @@ App 內建對應的公鑰（`Info.plist` 的 `SUPublicEDKey`），簽章不符�
 請依腳本最後的提示把私鑰匯出備份（不要放進 repo）。沒有設定公鑰的版本（例如別人自己建置的）
 不會啟用自動更新，也不會顯示「檢查更新…」。
 
-`appcast.xml` 的網址預設是 `kawaisumi/SoundDeck` 這個 repo；repo 名稱不同時，
-要同時修改 `Info.plist` 的 `SUFeedURL` 與執行 `release.sh` 時的環境變數 `SOUNDDECK_GITHUB_REPO`。
+`appcast.xml` 的網址預設是 `kawaisumi/Tonefleur` 這個 repo；repo 名稱不同時，
+要同時修改 `Info.plist` 的 `SUFeedURL` 與執行 `release.sh` 時的環境變數 `TONEFLEUR_GITHUB_REPO`。
 
 ### 發佈新版本
 
@@ -400,18 +401,18 @@ App 內建對應的公鑰（`Info.plist` 的 `SUPublicEDKey`），簽章不符�
 
 ```bash
 # 每 2 秒記錄各管線、各 App 的電平
-open build/SoundDeck.app --args --log-stats
+open build/Tonefleur.app --args --log-stats
 /usr/bin/log stream --predicate 'subsystem == "local.sounddeck.app"' --style compact
 
 # 列出偵測到的輸出裝置／混音器會顯示的 App，然後結束
-./build/SoundDeck.app/Contents/MacOS/SoundDeck --dump-devices
-./build/SoundDeck.app/Contents/MacOS/SoundDeck --dump-apps
+./build/Tonefleur.app/Contents/MacOS/Tonefleur --dump-devices
+./build/Tonefleur.app/Contents/MacOS/Tonefleur --dump-apps
 
 # 把選單列面板與 EQ 編輯器開成一般視窗，並在 4 秒後存成 PNG（可加 -AppleLanguages "(en)" 檢查英文版）
-open build/SoundDeck.app --args --preview --preview-snapshot <資料夾>
+open build/Tonefleur.app --args --preview --preview-snapshot <資料夾>
 
 # 啟動 8 秒後把指定 App 送到指定裝置，10 秒後還原
-open build/SoundDeck.app --args --log-stats --route-test <App 的 bundle ID> <裝置名稱>
+open build/Tonefleur.app --args --log-stats --route-test <App 的 bundle ID> <裝置名稱>
 ```
 
 ## 開發紀錄

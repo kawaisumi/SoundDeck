@@ -18,7 +18,7 @@ LITERAL = re.compile(r'(?<!#)"((?:[^"\\\n]|\\.)*)"')
 CJK = re.compile(r"[一-鿿]")
 # 這些行裡的中文不會顯示在介面上。
 # 行尾加上「// 不翻譯」可以明確標示某一行不需要翻譯（例如依語言整段切換的內容、記錄訊息的接續行）。
-SKIP_LINE = re.compile(r"Log\.|logger\.|precondition\(|name: \"SoundDeck|print\(|^\s*\"\||current \? \"\||// 不翻譯")
+SKIP_LINE = re.compile(r"Log\.|logger\.|precondition\(|name: \"Tonefleur|print\(|^\s*\"\||current \? \"\||// 不翻譯")
 
 
 def source_keys():

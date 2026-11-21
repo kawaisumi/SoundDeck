@@ -5,11 +5,11 @@
 # 先用 ./Scripts/set-version.sh 設定好版本號再執行。腳本不會上傳任何東西，
 # 最後會列出要手動完成的步驟（建立 GitHub Release、上傳 dmg、推送 appcast.xml）。
 #
-# GitHub repo 預設是 kawaisumi/SoundDeck，可以用環境變數 SOUNDDECK_GITHUB_REPO 改成別的。
+# GitHub repo 預設是 kawaisumi/Tonefleur，可以用環境變數 TONEFLEUR_GITHUB_REPO 改成別的。
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-REPO="${SOUNDDECK_GITHUB_REPO:-kawaisumi/SoundDeck}"
+REPO="${TONEFLEUR_GITHUB_REPO:-kawaisumi/Tonefleur}"
 PLIST="Resources/Info.plist"
 BIN=".build/artifacts/sparkle/Sparkle/bin"
 
@@ -29,10 +29,10 @@ fi
 
 ./Scripts/make-dmg.sh
 
-DMG="build/SoundDeck-${VERSION}.dmg"
+DMG="build/Tonefleur-${VERSION}.dmg"
 # 輸出像：sparkle:edSignature="..." length="12345"
 SIGNATURE_ATTRIBUTES="$("$BIN/sign_update" "$DMG")"
-URL="https://github.com/${REPO}/releases/download/v${VERSION}/SoundDeck-${VERSION}.dmg"
+URL="https://github.com/${REPO}/releases/download/v${VERSION}/Tonefleur-${VERSION}.dmg"
 NOTES="https://github.com/${REPO}/releases/tag/v${VERSION}"
 
 VERSION="$VERSION" BUILD="$BUILD" MIN_SYSTEM="$MIN_SYSTEM" URL="$URL" NOTES="$NOTES" \
@@ -42,7 +42,7 @@ from email.utils import formatdate
 
 env = os.environ
 item = f"""        <item>
-            <title>SoundDeck {env['VERSION']}</title>
+            <title>Tonefleur {env['VERSION']}</title>
             <pubDate>{formatdate(localtime=False, usegmt=True)}</pubDate>
             <sparkle:version>{env['BUILD']}</sparkle:version>
             <sparkle:shortVersionString>{env['VERSION']}</sparkle:shortVersionString>

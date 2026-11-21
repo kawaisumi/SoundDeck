@@ -1,4 +1,4 @@
-/* SoundDeck 英文介面。key 是原始碼裡的繁體中文。用 Scripts/check-localization.py 檢查漏翻。 */
+/* Tonefleur 英文介面。key 是原始碼裡的繁體中文。用 Scripts/check-localization.py 檢查漏翻。 */
 
 "頻率響應曲線" = "Frequency response curve";
 "頻段 %d" = "Band %d";
@@ -64,15 +64,15 @@
 "已複製目前的設定" = "Current settings copied";
 "複製目前的設定" = "Copy Current Settings";
 "把目前的等化器設定複製成文字，可以分享給別人或存檔。" = "Copies the current equalizer settings as text, to share or keep.";
-"找到 %d 個頻段。檔案的前級增益 %+.1f dB 僅供參考，匯入後改由自動補償計算。" = "Found %d bands. The file's preamp of %+.1f dB is ignored; SoundDeck sets the preamp automatically.";
+"找到 %d 個頻段。檔案的前級增益 %+.1f dB 僅供參考，匯入後改由自動補償計算。" = "Found %d bands. The file's preamp of %+.1f dB is ignored; Tonefleur sets the preamp automatically.";
 "找到 %d 個頻段。" = "Found %d bands.";
 "鐘形" = "Peak";
 "（停用）" = " (off)";
 "剪貼簿裡沒有文字。" = "There's no text on the clipboard.";
 "無法讀取檔案：%@" = "Couldn't read the file: %@";
-"需要到「系統設定 → 一般 → 登入項目與延伸功能」允許 SoundDeck。" = "Allow SoundDeck in System Settings → General → Login Items & Extensions.";
+"需要到「系統設定 → 一般 → 登入項目與延伸功能」允許 Tonefleur。" = "Allow Tonefleur in System Settings → General → Login Items & Extensions.";
 "無法變更登入項目：%@" = "Couldn't change the login item: %@";
-"目前是從建置資料夾執行。建議先用 Scripts/install.sh 安裝到「應用程式」再開啟這個選項，否則重新建置後可能失效。" = "SoundDeck is running from the build folder. Install it to Applications with Scripts/install.sh before turning this on, or it may stop working after a rebuild.";
+"目前是從建置資料夾執行。建議先用 Scripts/install.sh 安裝到「應用程式」再開啟這個選項，否則重新建置後可能失效。" = "Tonefleur is running from the build folder. Install it to Applications with Scripts/install.sh before turning this on, or it may stop working after a rebuild.";
 "啟用音訊處理" = "Enable audio processing";
 "關閉後聲音會直接輸出，等化器、混音器與軟體音量都不作用。" = "When off, audio plays directly; the equalizer, mixer and software volume have no effect.";
 "已停用，聲音直接輸出" = "Off — audio plays directly";
@@ -81,7 +81,7 @@
 "權限設定位置：系統設定 → 隱私權與安全性 → 螢幕與系統音訊錄製。" = "Permission is in System Settings → Privacy & Security → Screen & System Audio Recording.";
 "開機時自動啟動" = "Launch at login";
 "結束" = "Quit";
-"結束 SoundDeck，聲音會恢復成系統原本的輸出。" = "Quit SoundDeck. Audio returns to the system's normal output.";
+"結束 Tonefleur，聲音會恢復成系統原本的輸出。" = "Quit Tonefleur. Audio returns to the system's normal output.";
 "建置編號 %@" = "Build %@";
 "檢查更新…" = "Check for Updates…";
 "主音量" = "Volume";
@@ -119,15 +119,15 @@
 "樂團" = "Band";
 "小音量補償" = "Loudness";
 "找不到任何濾波器設定。內容需要有像「Filter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.0」這樣的行。" = "No filter settings found. The text needs lines like “Filter 1: ON PK Fc 1000 Hz Gain 2.0 dB Q 1.0”.";
-"SoundDeck 最多 %d 個頻段，後面 %d 個沒有匯入。" = "SoundDeck supports up to %d bands; the remaining %d were not imported.";
+"Tonefleur 最多 %d 個頻段，後面 %d 個沒有匯入。" = "Tonefleur supports up to %d bands; the remaining %d were not imported.";
 "%@：看不懂這一行，已略過。" = "%@: couldn't understand this line; skipped.";
-"%@：SoundDeck 不支援「%@」類型，已略過。" = "%@: SoundDeck doesn't support the “%@” type; skipped.";
+"%@：Tonefleur 不支援「%@」類型，已略過。" = "%@: Tonefleur doesn't support the “%@” type; skipped.";
 "%@：缺少頻率（Fc），已略過。" = "%@: missing frequency (Fc); skipped.";
 "%@：沒有 Q 值，使用 %@。" = "%@: no Q given; using %@.";
 "%@：頻率超出 20–20000 Hz，已調整為 %@ Hz。" = "%@: frequency outside 20–20000 Hz; changed to %@ Hz.";
 "%@：增益超出 ±18 dB，已調整為 %@ dB。" = "%@: gain outside ±18 dB; changed to %@ dB.";
 "%@：Q 值超出 0.1–18，已調整為 %@。" = "%@: Q outside 0.1–18; changed to %@.";
-"取得自身的音訊 process 物件" = "Getting SoundDeck's own audio process";
+"取得自身的音訊 process 物件" = "Getting Tonefleur's own audio process";
 "偵測到音量異常暴衝（可能是與其他音訊工具形成回授），已自動停用。" = "A sudden volume surge was detected (possibly feedback with another audio tool), so processing was turned off.";
 "系統沒有送出任何音訊，通常是因為還沒有允許「系統音訊錄製」權限。允許後會自動開始。" = "The system isn't delivering any audio, usually because the System Audio Recording permission hasn't been granted. Processing starts automatically once it is.";
 "%@失敗（OSStatus %ld %@）" = "%@ failed (OSStatus %ld %@)";
@@ -161,4 +161,4 @@
 "建立 process tap" = "Creating the process tap";
 "讀取 tap 格式" = "Reading the tap format";
 "自動檢查更新" = "Check for updates automatically";
-"每天向 GitHub 檢查一次有沒有新版本。這是 SoundDeck 唯一會連網的功能；關閉後，除非你手動按「檢查更新…」，SoundDeck 完全不會連網。" = "Checks GitHub once a day for a new version. This is the only feature in SoundDeck that uses the network; when it's off, SoundDeck never connects to the internet unless you click “Check for Updates…”.";
+"每天向 GitHub 檢查一次有沒有新版本。這是 Tonefleur 唯一會連網的功能；關閉後，除非你手動按「檢查更新…」，Tonefleur 完全不會連網。" = "Checks GitHub once a day for a new version. This is the only feature in Tonefleur that uses the network; when it's off, Tonefleur never connects to the internet unless you click “Check for Updates…”.";

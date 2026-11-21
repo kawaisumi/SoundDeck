@@ -21,7 +21,7 @@ final class LoginItem: ObservableObject {
             message = nil
         case .requiresApproval:
             isEnabled = false
-            message = L("需要到「系統設定 → 一般 → 登入項目與延伸功能」允許 SoundDeck。")
+            message = L("需要到「系統設定 → 一般 → 登入項目與延伸功能」允許 Tonefleur。")
         default:
             isEnabled = false
         }

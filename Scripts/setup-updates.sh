@@ -3,7 +3,7 @@
 # 只需要在這台電腦上執行一次。
 #
 # 私鑰存在登入鑰匙圈裡，之後每次用 Scripts/release.sh 發佈時用來替更新檔簽章；
-# 已安裝的 SoundDeck 只會接受用同一把私鑰簽過的更新。
+# 已安裝的 Tonefleur 只會接受用同一把私鑰簽過的更新。
 # **私鑰遺失就再也無法推送更新給已安裝的使用者**，請務必依照最後的提示備份。
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -23,6 +23,6 @@ echo
 echo "已把公鑰寫入 Resources/Info.plist。重新建置後，自動更新就會啟用。"
 echo
 echo "請備份私鑰（存到密碼管理器或隨身碟，不要放進這個 repo）："
-echo "  ${BIN}/generate_keys -x ~/Desktop/SoundDeck-更新私鑰.txt"
+echo "  ${BIN}/generate_keys -x ~/Desktop/Tonefleur-更新私鑰.txt"
 echo "換電腦時用這個指令匯回："
 echo "  ${BIN}/generate_keys -f <私鑰檔案>"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# 設定 SoundDeck 的版本號，並把內部建置編號加一。
+# 設定 Tonefleur 的版本號，並把內部建置編號加一。
 # 用法：./Scripts/set-version.sh 1.2.0
 #
 # 版本號採「主版本.次版本.修正版本」：

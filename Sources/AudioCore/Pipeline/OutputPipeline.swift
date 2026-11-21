@@ -86,13 +86,13 @@ final class OutputPipeline {
         var taps: [ProcessTap] = [
             try ProcessTap(
                 mode: .excluding, processes: [ownProcess] + excluded,
-                outputDeviceUID: outputUID, name: "SoundDeck 其他"
+                outputDeviceUID: outputUID, name: "Tonefleur 其他"
             ),
         ]
         for slot in 1..<slotCount {
             taps.append(try ProcessTap(
                 mode: .including, processes: slotProcesses[slot],
-                outputDeviceUID: sourceDeviceUID, name: "SoundDeck 槽位 \(slot)"
+                outputDeviceUID: sourceDeviceUID, name: "Tonefleur 槽位 \(slot)"
             ))
         }
 
@@ -108,7 +108,7 @@ final class OutputPipeline {
         }
 
         let description: [String: Any] = [
-            kAudioAggregateDeviceNameKey: "SoundDeck (\(deviceName))",
+            kAudioAggregateDeviceNameKey: "Tonefleur (\(deviceName))",
             kAudioAggregateDeviceUIDKey: HAL.aggregateUIDPrefix + UUID().uuidString,
             kAudioAggregateDeviceMainSubDeviceKey: outputUID,
             kAudioAggregateDeviceIsPrivateKey: true,

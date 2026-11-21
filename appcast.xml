@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
     <channel>
-        <title>SoundDeck</title>
-        <description>SoundDeck 的更新資訊。由 Scripts/release.sh 自動更新，請不要手動修改。</description>
+        <title>Tonefleur</title>
+        <description>Tonefleur 的更新資訊。由 Scripts/release.sh 自動更新，請不要手動修改。</description>
         <language>zh-Hant</language>
         <item>
             <title>SoundDeck 1.0.0</title>
@@ -10,8 +10,8 @@
             <sparkle:version>2</sparkle:version>
             <sparkle:shortVersionString>1.0.0</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>15.0</sparkle:minimumSystemVersion>
-            <sparkle:releaseNotesLink>https://github.com/kawaisumi/SoundDeck/releases/tag/v1.0.0</sparkle:releaseNotesLink>
-            <enclosure url="https://github.com/kawaisumi/SoundDeck/releases/download/v1.0.0/SoundDeck-1.0.0.dmg" type="application/octet-stream" sparkle:edSignature="xlJCNP/QVrbk65OgX1tq+LyXbG7bYT1i0aXF/izWgQta1XpCDZ1Rbwz+IjN+PGtbyOxHMknxhv9rFo7Qt9uyDw==" length="3045156" />
+            <sparkle:releaseNotesLink>https://github.com/kawaisumi/Tonefleur/releases/tag/v1.0.0</sparkle:releaseNotesLink>
+            <enclosure url="https://github.com/kawaisumi/Tonefleur/releases/download/v1.0.0/SoundDeck-1.0.0.dmg" type="application/octet-stream" sparkle:edSignature="xlJCNP/QVrbk65OgX1tq+LyXbG7bYT1i0aXF/izWgQta1XpCDZ1Rbwz+IjN+PGtbyOxHMknxhv9rFo7Qt9uyDw==" length="3045156" />
         </item>
     </channel>
 </rss>
