@@ -77,7 +77,7 @@ private struct MixerRow: View {
             Button {
                 mixer.setDevice(nil, for: channel.id)
             } label: {
-                menuLabel("跟隨系統預設", isSelected: channel.deviceUID == nil)
+                menuLabel(L("跟隨系統預設"), isSelected: channel.deviceUID == nil)
             }
             Divider()
             ForEach(devices.devices) { device in
@@ -95,7 +95,7 @@ private struct MixerRow: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .help("選擇這個 App 的輸出裝置")
-        .accessibilityLabel("\(channel.name) 的輸出裝置")
+        .accessibilityLabel(L("%@ 的輸出裝置", channel.name))
     }
 
     @ViewBuilder
@@ -113,7 +113,7 @@ private struct MixerRow: View {
         if let device = assignedDevice {
             return device.id == devices.currentDeviceID ? nil : "→ \(device.name)"
         }
-        return "指定的裝置未連接，暫時使用系統預設"
+        return L("指定的裝置未連接，暫時使用系統預設")
     }
 
     var body: some View {
@@ -130,7 +130,7 @@ private struct MixerRow: View {
                         .truncationMode(.tail)
                         .foregroundStyle(channel.isPlaying || isOther ? .primary : .secondary)
                     Spacer(minLength: 4)
-                    Text(channel.isMuted ? "靜音" : "\(Int((channel.volume * 100).rounded()))%")
+                    Text(channel.isMuted ? L("靜音") : "\(Int((channel.volume * 100).rounded()))%")
                         .font(.caption)
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -153,7 +153,7 @@ private struct MixerRow: View {
                 )
                 .controlSize(.small)
                 .disabled(channel.isMuted)
-                .accessibilityLabel("\(channel.name) 音量")
+                .accessibilityLabel(L("%@ 音量", channel.name))
 
                 LevelBar(peak: peak)
             }
@@ -170,8 +170,8 @@ private struct MixerRow: View {
                     .foregroundStyle(channel.isMuted ? Color.red : .secondary)
             }
             .buttonStyle(.borderless)
-            .help(channel.isMuted ? "取消靜音" : "靜音")
-            .accessibilityLabel(channel.isMuted ? "取消 \(channel.name) 的靜音" : "將 \(channel.name) 靜音")
+            .help(channel.isMuted ? L("取消靜音") : L("靜音"))
+            .accessibilityLabel(channel.isMuted ? L("取消 %@ 的靜音", channel.name) : L("將 %@ 靜音", channel.name))
         }
     }
 

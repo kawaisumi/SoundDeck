@@ -5,6 +5,10 @@ let package = Package(
     name: "SoundDeck",
     defaultLocalization: "zh-Hant",
     platforms: [.macOS(.v15)],
+    dependencies: [
+        // 自動更新：https://sparkle-project.org
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.6.4"),
+    ],
     targets: [
         // 不依賴 UI 的音訊核心
         .target(
@@ -14,7 +18,10 @@ let package = Package(
         // 選單列 App
         .executableTarget(
             name: "SoundDeck",
-            dependencies: ["AudioCore"],
+            dependencies: [
+                "AudioCore",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
             path: "Sources/App",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),

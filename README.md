@@ -16,16 +16,20 @@
 | 功能 | 說明 |
 |---|---|
 | **參數式等化器** | 最多 16 個頻段，六種濾波器（鐘形、低頻擱架、高頻擱架、高通、低通、陷波），可拖曳的頻率響應曲線 |
+| **頻譜分析儀** | 在 EQ 曲線後面即時顯示目前播出的聲音在各頻率的音量，手動微調時能看出該加強或衰減哪裡 |
 | **每個裝置各自的 EQ** | 耳機、喇叭、soundbar 各記一組，切換輸出時自動套用 |
 | **EQ 預設組** | 內建平坦、低音加強、高音加強、人聲清晰、樂團、小音量補償；可儲存、改名、刪除自訂預設組 |
 | **匯入 EQ** | 匯入 [AutoEQ](https://github.com/jaakkopasanen/AutoEq) 的耳機校正檔；或複製範本請 AI 依你常聽的音樂產生參數，把回覆貼回來就能套用 |
 | **App 混音器** | 每個正在發聲的 App 一列，各自調整音量（0–200%）與靜音，並顯示即時電平 |
 | **依 App 指定輸出裝置** | 例如音樂走喇叭、通話走耳機。總開關預設關閉；可一鍵全部還原為系統預設 |
 | **輸出裝置管理** | 一鍵切換系統輸出；HDMI 螢幕等沒有音量控制的裝置也能調音量（自動改用軟體音量） |
+| **左右聲道平衡** | 每個輸出裝置各自記住 |
 | **限幅器** | EQ 加強或 App 音量超過 100% 時，把峰值壓在 −1 dBFS 以下，避免爆音 |
+| **自動更新** | 有新版時提示下載安裝 |
 | **其他** | 開機自動啟動、休眠喚醒後自動恢復、音量異常暴衝時自動停用 |
 
-介面為繁體中文。
+介面有繁體中文與英文，依系統語言自動切換；其他語言的系統會顯示英文。
+也可以在「系統設定 → 一般 → 語言與地區 → 應用程式」單獨指定 SoundDeck 的語言。
 
 ## 系統需求
 
@@ -44,6 +48,9 @@
    3. 之後就可以正常打開，不會再出現這個提示。
 4. 系統會詢問是否允許 SoundDeck 錄製**系統音訊**，請按「允許」。沒有這個權限就無法處理聲音。
 5. 選單列出現 SoundDeck 的圖示（三條垂直推桿）就代表開始運作了。
+
+之後有新版本時，SoundDeck 會自動提示，按「安裝更新」即可，不需要再重新下載 dmg。
+也可以在控制面板底部按「檢查更新…」。
 
 > **為什麼會被擋？** 這個 App 沒有經過 Apple 公證（需要付費的 Apple Developer 帳號），
 > 所以系統無法確認開發者身分。程式碼都在這個 repo 裡，也可以自己從原始碼建置。
@@ -72,6 +79,7 @@ cd SoundDeck
 
 - **右上角開關**：整個 SoundDeck 的總開關。關閉後聲音直接輸出，不經過任何處理。
 - **主音量**：目前輸出裝置的音量。裝置本身沒有音量控制時（例如 HDMI 螢幕）會自動改用軟體音量。
+- **平衡**：主音量下方的 L／R 滑桿，按右邊的文字回到置中。
 - **輸出裝置**：點一下切換系統輸出。
 - **混音器**：各 App 的音量、靜音與電平。
   - 打開「依 App 指定裝置」後，每一列多一個喇叭圖示，可以把該 App 指定到其他裝置。
@@ -80,6 +88,8 @@ cd SoundDeck
 - **等化器**：切換預設組，或按「編輯…」打開編輯器。
   - 拖曳控制點調整頻率與增益；按住 `Shift` 拖曳可以微調；雙擊控制點把增益歸零。
   - 編輯器上方可以選擇要調哪個輸出裝置的 EQ。
+  - 曲線後面的灰色區域是頻譜：目前正在播的聲音在各頻率有多大聲。播一首常聽的歌，
+    哪裡太突出就在那裡衰減，哪裡不夠就加強。只有正在編輯的裝置正在播放時才會出現，可以用「顯示頻譜」關掉。
   - 按編輯器右上角的「**匯入**」可以匯入設定，見下一節。
 
 ### 匯入 EQ 設定
@@ -260,6 +270,8 @@ IOProc 跑在即時音訊執行緒上，不能配置記憶體、不能等待鎖�
 - 部分 HDMI 裝置的管線啟動時間不穩定（從不到 1 秒到 20 秒以上都有），目前靠自動重試恢復，原因未查明。
 - 少數專業錄音介面把聲道分在多個串流上，目前只處理第一個串流。
 - 與其他會攔截或轉送系統聲音的工具（eqMac、SoundSource 等）同時使用沒有意義，建議擇一。
+- 左右平衡在 SoundDeck 的管線裡處理，音訊處理關閉時不會作用。
+- 自動更新只在 Sparkle 的流程上做過測試，還沒有經過一次真正的「舊版收到通知並更新成新版」。
 
 ## 開發
 
@@ -278,9 +290,9 @@ SoundDeck/
 │   │   ├── DSP/                   # Biquad、參數式 EQ、Limiter、EQ 設定與預設組、匯入匯出格式
 │   │   ├── Mixer/                 # MixerController：槽位分配、各 App 音量與指定裝置
 │   │   └── Engine/                # AudioEngine：管理多條管線與路由
-│   └── App/                       # SwiftUI：選單列面板、混音器、EQ 編輯器
+│   └── App/                       # SwiftUI：選單列面板、混音器、EQ 編輯器、自動更新
 ├── Tests/AudioCoreTests/          # DSP、匯入格式與歸屬判定的單元測試
-├── Resources/                     # Info.plist、App 圖示
+├── Resources/                     # Info.plist、App 圖示、en.lproj／zh-Hant.lproj 翻譯
 └── Scripts/                       # 建置、打包、簽章、圖示
 ```
 
@@ -292,6 +304,9 @@ SoundDeck/
 | `./Scripts/install.sh` | 建置、安裝到 `/Applications` 並啟動 |
 | `./Scripts/make-dmg.sh` | 打包成 `build/SoundDeck-<版本>.dmg` |
 | `./Scripts/set-version.sh <版本號>` | 設定版本號，並把建置編號加一 |
+| `./Scripts/setup-updates.sh` | 建立自動更新用的簽章金鑰（只需執行一次） |
+| `./Scripts/release.sh` | 打包、替更新檔簽章，並更新 `appcast.xml` |
+| `python3 Scripts/check-localization.py` | 檢查介面文字有沒有漏翻成英文 |
 | `./Scripts/create-signing-cert.sh` | 在登入鑰匙圈建立自簽的程式碼簽章憑證 `SoundDeck Dev` |
 | `./Scripts/make-icon.sh` | 由 `make-icon.swift` 重新產生 App 圖示 |
 | `swift test` | 執行單元測試 |
@@ -308,14 +323,33 @@ macOS 的錄音權限綁定程式簽章。沒有憑證時 `bundle.sh` 會用 ad-
 它會建立一張只在本機有效、只信任於「程式碼簽章」用途的自簽憑證（過程中系統會要求輸入登入密碼），
 之後 `bundle.sh` 會自動使用它。也可以用環境變數 `SOUNDDECK_SIGN_IDENTITY` 指定其他憑證。
 
+### 自動更新的運作方式
+
+使用 [Sparkle](https://sparkle-project.org)。App 每天檢查一次 repo 裡的 `appcast.xml`，
+裡面列出各版本的版本號與 dmg 下載網址（GitHub Releases）。每個 dmg 都用 EdDSA 私鑰簽章，
+App 內建對應的公鑰（`Info.plist` 的 `SUPublicEDKey`），簽章不符的更新會被拒絕。
+
+第一次發佈前，先在這台電腦執行一次：
+
+```bash
+./Scripts/setup-updates.sh
+```
+
+它會在登入鑰匙圈建立私鑰，並把公鑰寫進 `Info.plist`。**私鑰遺失就無法再推送更新給已安裝的人**，
+請依腳本最後的提示把私鑰匯出備份（不要放進 repo）。沒有設定公鑰的版本（例如別人自己建置的）
+不會啟用自動更新，也不會顯示「檢查更新…」。
+
+`appcast.xml` 的網址預設是 `kawaisumi/SoundDeck` 這個 repo；repo 名稱不同時，
+要同時修改 `Info.plist` 的 `SUFeedURL` 與執行 `release.sh` 時的環境變數 `SOUNDDECK_GITHUB_REPO`。
+
 ### 發佈新版本
 
 1. 設定版本號：`./Scripts/set-version.sh 1.1.0`。版本號採「主版本.次版本.修正版本」：
    修正 bug 加最後一碼（1.0.0 → 1.0.1），新增功能加中間一碼（1.0.1 → 1.1.0）。腳本也會把內部建置編號加一。
-2. commit 這次的版本變更，並加上同名的 tag：`git tag v1.1.0`。
-3. 執行 `./Scripts/make-dmg.sh`，產生 `build/SoundDeck-<版本>.dmg`。
-4. 計算校驗碼：`shasum -a 256 build/SoundDeck-<版本>.dmg`。
-5. 在 GitHub 建立新的 Release，選剛才的 tag，把 dmg 上傳為附件，並把校驗碼貼在說明裡。
+2. 執行 `./Scripts/release.sh`：打包 dmg、替它簽章、在 `appcast.xml` 加上這個版本，最後列出校驗碼。
+3. 依腳本列出的順序完成：commit 並打 tag → 推送 tag → 在 GitHub 建立 Release 並上傳 dmg →
+   最後才推送 `main`。順序很重要：`appcast.xml` 一推上去，已安裝的人就會收到通知，
+   這時 dmg 必須已經可以下載。
 
 目前的版本號顯示在控制面板右下角「結束」按鈕的左邊；滑鼠停在上面會顯示建置編號。
 
@@ -333,6 +367,9 @@ open build/SoundDeck.app --args --log-stats
 ./build/SoundDeck.app/Contents/MacOS/SoundDeck --dump-devices
 ./build/SoundDeck.app/Contents/MacOS/SoundDeck --dump-apps
 
+# 把選單列面板與 EQ 編輯器開成一般視窗，並在 4 秒後存成 PNG（可加 -AppleLanguages "(en)" 檢查英文版）
+open build/SoundDeck.app --args --preview --preview-snapshot <資料夾>
+
 # 啟動 8 秒後把指定 App 送到指定裝置，10 秒後還原
 open build/SoundDeck.app --args --log-stats --route-test <App 的 bundle ID> <裝置名稱>
 ```
@@ -348,14 +385,15 @@ open build/SoundDeck.app --args --log-stats --route-test <App 的 bundle ID> <�
 | M4 | 依 App 指定輸出裝置、多條管線、每個裝置各自的 EQ |
 | M5 | 自訂預設組、開機自動啟動、介面整理、App 圖示、dmg 打包 |
 | M6 | 匯入 AutoEQ／Equalizer APO 格式、給 AI 的參數範本、匯出目前設定 |
+| M7 | 左右聲道平衡、自動更新（Sparkle）、頻譜分析儀、英文介面 |
 
 ### 之後可能做的
 
 - 全域快捷鍵（切換裝置、開關 EQ、切換預設組）
+- App 內直接搜尋 AutoEQ 耳機（目前要先到網站下載檔案）
 - 輸入裝置（麥克風）的選擇與音量
 - 依 App 獨立的 EQ
 - 圖形式 EQ（固定 10 段的簡易介面）
-- 左右聲道平衡
 
 ## 參考資料
 

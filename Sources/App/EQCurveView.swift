@@ -4,9 +4,15 @@ import SwiftUI
 
 /// 頻率響應曲線與可拖曳的頻段控制點。
 struct EQCurveView: View {
+    @EnvironmentObject private var engine: AudioEngine
     @EnvironmentObject private var equalizer: EqualizerController
     let sampleRate: Double
     @Binding var selectedBand: EQBand.ID?
+    /// 是否在曲線後面畫即時頻譜。
+    var showsSpectrum = false
+
+    /// 頻譜的平滑狀態要跨畫面保留，但改變時不需要重畫 view，所以用參考型別放在 @State 裡。
+    @State private var spectrum = SpectrumDisplay()
 
     /// 拖曳開始時該頻段的數值。拖曳量是相對於起點計算，這樣 Shift 微調才不會跳動。
     @State private var dragOrigin: (id: EQBand.ID, frequency: Double, gainDB: Double)?
@@ -20,9 +26,15 @@ struct EQCurveView: View {
         GeometryReader { geometry in
             let layout = Layout(size: geometry.size)
             ZStack(alignment: .topLeading) {
-                Canvas { context, _ in
-                    drawGrid(in: &context, layout: layout)
-                    drawCurve(in: &context, layout: layout)
+                // 顯示頻譜時每秒重畫約 30 次；不顯示時暫停，不佔運算。
+                TimelineView(.animation(minimumInterval: 1.0 / 30, paused: !showsSpectrum)) { _ in
+                    Canvas { context, _ in
+                        drawGrid(in: &context, layout: layout)
+                        if showsSpectrum {
+                            drawSpectrum(in: &context, layout: layout)
+                        }
+                        drawCurve(in: &context, layout: layout)
+                    }
                 }
 
                 ForEach(Array(equalizer.settings.bands.enumerated()), id: \.element.id) { index, band in
@@ -102,6 +114,50 @@ struct EQCurveView: View {
         }
     }
 
+    /// 目前播出的聲音的頻譜（處理後），畫成淡色的填色區域。縱軸是 −90 到 −6 dBFS，跟 EQ 的增益刻度無關。
+    private func drawSpectrum(in context: inout GraphicsContext, layout: Layout) {
+        guard let samples = engine.readSpectrumSamples(deviceUID: equalizer.deviceUID, count: spectrum.analyzer.size) else {
+            return
+        }
+        let levels = spectrum.update(with: samples)
+        guard !levels.isEmpty else { return }
+
+        let plot = layout.plot
+        let floor: Float = -90
+        let ceiling: Float = -6
+        let binWidth = sampleRate / Double(spectrum.analyzer.size)
+        let step: CGFloat = 2
+        let stepCount = max(Int(plot.width / step), 2)
+
+        var path = Path()
+        path.move(to: CGPoint(x: plot.minX, y: plot.maxY))
+        for index in 0...stepCount {
+            let x = plot.minX + plot.width * CGFloat(index) / CGFloat(stepCount)
+            // 一個畫素可能涵蓋好幾格（高頻），也可能不到一格（低頻）：取範圍內最大的那格。
+            let low = layout.frequency(for: x - step / 2)
+            let high = layout.frequency(for: x + step / 2)
+            let firstBin = max(1, Int(low / binWidth))
+            let lastBin = min(levels.count - 1, max(firstBin, Int(high / binWidth)))
+            var level = floor
+            if firstBin <= lastBin {
+                for bin in firstBin...lastBin { level = max(level, levels[bin]) }
+            }
+            let fraction = CGFloat((min(max(level, floor), ceiling) - floor) / (ceiling - floor))
+            path.addLine(to: CGPoint(x: x, y: plot.maxY - plot.height * fraction))
+        }
+        path.addLine(to: CGPoint(x: plot.maxX, y: plot.maxY))
+        path.closeSubpath()
+
+        context.fill(
+            path,
+            with: .linearGradient(
+                Gradient(colors: [Color.secondary.opacity(0.35), Color.secondary.opacity(0.08)]),
+                startPoint: CGPoint(x: plot.midX, y: plot.minY),
+                endPoint: CGPoint(x: plot.midX, y: plot.maxY)
+            )
+        )
+    }
+
     private func drawCurve(in context: inout GraphicsContext, layout: Layout) {
         let plot = layout.plot
         let settings = equalizer.settings
@@ -172,8 +228,8 @@ struct EQCurveView: View {
                 TapGesture().onEnded { selectedBand = band.id }
             )
             .help(String(format: "%.0f Hz · %+.1f dB · Q %.2f", band.frequency, band.gainDB, band.q))
-            .accessibilityLabel("頻段 \(index + 1)")
-            .accessibilityValue(String(format: "%.0f 赫茲，%+.1f 分貝", band.frequency, band.gainDB))
+            .accessibilityLabel(L("頻段 %d", index + 1))
+            .accessibilityValue(L("%.0f 赫茲，%+.1f 分貝", band.frequency, band.gainDB))
     }
 
     private func drag(_ band: EQBand, translation: CGSize, layout: Layout) {
@@ -207,5 +263,25 @@ struct EQCurveView: View {
 private extension Comparable {
     func clamped(to range: ClosedRange<Self>) -> Self {
         min(max(self, range.lowerBound), range.upperBound)
+    }
+}
+
+/// 頻譜分析的狀態：FFT 與「上升立即、下降緩慢」的平滑，讓畫面不會一直閃。
+final class SpectrumDisplay {
+    let analyzer = SpectrumAnalyzer(size: 4096)
+    private var levels: [Float] = []
+    /// 每一格畫面最多下降幾 dB（約 30 fps，所以大約每秒 45 dB）。
+    private let fallPerFrame: Float = 1.5
+
+    func update(with samples: [Float]) -> [Float] {
+        let fresh = analyzer.analyze(samples)
+        if levels.count != fresh.count {
+            levels = fresh
+        } else {
+            for index in levels.indices {
+                levels[index] = max(fresh[index], levels[index] - fallPerFrame)
+            }
+        }
+        return levels
     }
 }

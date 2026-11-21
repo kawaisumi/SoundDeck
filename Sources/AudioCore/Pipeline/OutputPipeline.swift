@@ -75,6 +75,7 @@ final class OutputPipeline {
         excluded: [AudioObjectID],
         slotGains: [Float],
         initialGain: Float,
+        initialBalance: Float,
         equalizer: EQSettings
     ) throws {
         let outputUID = try HAL.deviceUID(outputDevice)
@@ -187,7 +188,10 @@ final class OutputPipeline {
             state.initialize(to: RenderState(
                 slotLeft: slotLeft, slotRight: slotRight, slotGains: slotGains,
                 outLeft: outLeft, outRight: outRight,
-                dsp: DSPKernel(sampleRate: info.sampleRate, initialVolume: Double(initialGain))
+                dsp: DSPKernel(
+                    sampleRate: info.sampleRate,
+                    initialVolume: Double(initialGain), initialBalance: Double(initialBalance)
+                )
             ))
 
             self.deviceUID = outputUID
@@ -200,10 +204,10 @@ final class OutputPipeline {
             setEqualizer(equalizer)
 
             Log.info(
-                "管線建立：\(deviceName) \(info.sampleRate) Hz，緩衝 \(info.bufferFrames) frames"
-                + "（\(String(format: "%.1f", info.bufferMilliseconds)) ms），\(slotCount) 個槽位，"
-                + "輸入配置 \(inputLayout)（tap 起始聲道 \(tapOffset)），"
-                + "輸出配置 \(outputLayout)（L=\(leftIndex) R=\(rightIndex)）"
+                "管線建立：\(deviceName) \(info.sampleRate) Hz，緩衝 \(info.bufferFrames) frames" // 不翻譯
+                + "（\(String(format: "%.1f", info.bufferMilliseconds)) ms），\(slotCount) 個槽位，" // 不翻譯
+                + "輸入配置 \(inputLayout)（tap 起始聲道 \(tapOffset)），" // 不翻譯
+                + "輸出配置 \(outputLayout)（L=\(leftIndex) R=\(rightIndex)）" // 不翻譯
             )
         } catch {
             AudioHardwareDestroyAggregateDevice(aggregateID)
@@ -285,6 +289,13 @@ final class OutputPipeline {
     // MARK: - 主音量與 EQ
 
     /// 設定管線末端的增益（軟體音量）。即時執行緒會平滑地過渡過去。
+    /// 設定左右平衡（−1…1）。
+    func setBalance(_ balance: Float) {
+        withUnsafeMutablePointer(to: &state.pointee.dsp) {
+            DSPKernel.setBalance($0, Double(balance))
+        }
+    }
+
     func setGain(_ gain: Float) {
         withUnsafeMutablePointer(to: &state.pointee.dsp) {
             DSPKernel.setVolume($0, Double(gain))
@@ -306,6 +317,23 @@ final class OutputPipeline {
         let preamp = pow(10, preampDB / 20)
         withUnsafeMutablePointer(to: &state.pointee.dsp) {
             DSPKernel.update($0, filters: filters, preamp: preamp)
+        }
+    }
+
+    // MARK: - 頻譜
+
+    func setSpectrumEnabled(_ enabled: Bool) {
+        state.pointee.spectrumEnabled = enabled
+    }
+
+    /// 最近 `count` 個處理後的 sample（左右平均），舊的在前。
+    func readSpectrumSamples(count: Int) -> [Float] {
+        let capacity = RenderState.spectrumCapacity
+        let count = min(count, capacity)
+        let end = state.pointee.spectrumWriteIndex
+        let buffer = state.pointee.spectrumBuffer
+        return (0..<count).map { offset in
+            buffer[(end - count + offset) & (capacity - 1)]
         }
     }
 

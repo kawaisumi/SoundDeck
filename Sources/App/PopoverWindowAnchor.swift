@@ -65,6 +65,8 @@ struct PopoverWindowAnchor: NSViewRepresentable {
         }
 
         func apply() {
+            // 開發用的預覽視窗是一般視窗，大小由 NSHostingView 自己決定，這裡再去改會互相打架。
+            guard !DebugFlags.preview else { return }
             guard !isApplying, let window, let anchorTop, contentHeight > 1 else { return }
             let current = window.frame
             let target = NSRect(

@@ -15,11 +15,12 @@ struct SoundDeckApp: App {
                 .environmentObject(appDelegate.devices)
                 .environmentObject(appDelegate.equalizer)
                 .environmentObject(appDelegate.mixer)
+                .environmentObject(appDelegate.updater)
         }
         .menuBarExtraStyle(.window)
 
         // EQ 編輯器是獨立視窗：Popover 點到外面就會收合，不適合長時間調整。
-        Window("等化器", id: WindowID.equalizer) {
+        Window(L("等化器"), id: WindowID.equalizer) {
             EQEditorView()
                 .environmentObject(appDelegate.engine)
                 .environmentObject(appDelegate.devices)
@@ -31,6 +32,10 @@ struct SoundDeckApp: App {
     }
 }
 
+enum DebugFlags {
+    static let preview = CommandLine.arguments.contains("--preview")
+}
+
 enum WindowID {
     static let equalizer = "equalizer"
 }
@@ -40,6 +45,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let devices: DeviceManager
     let equalizer: EqualizerController
     let mixer: MixerController
+    let updater = Updater()
     private var statsLogTimer: Timer?
     private var subscriptions = Set<AnyCancellable>()
 
@@ -85,6 +91,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         engine.start()
 
+        if DebugFlags.preview { openPreviewWindows() }
+
         // 開發用：--route-test <App ID> <裝置名稱>，啟動 8 秒後把該 App 指定到該裝置，再過 10 秒還原。
         if let index = CommandLine.arguments.firstIndex(of: "--route-test"), index + 2 < CommandLine.arguments.count {
             let appID = CommandLine.arguments[index + 1]
@@ -128,6 +136,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     logger.notice("callbacks=\(stats.callbackCount) peak=\(stats.inputPeak) status=\(status, privacy: .public)")
                 } else {
                     logger.notice("no pipeline, status=\(status, privacy: .public)")
+                }
+            }
+        }
+    }
+
+    /// 開發用：加上 --preview 啟動時，把選單列面板與 EQ 編輯器開成一般視窗，方便截圖檢查排版。
+    private var previewWindows: [NSWindow] = []
+
+    private func openPreviewWindows() {
+        func show<Content: View>(_ title: String, _ content: Content, at origin: NSPoint) {
+            let window = NSWindow(
+                contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false
+            )
+            window.title = title
+            window.isReleasedWhenClosed = false
+            // 存成圖片時沒有視窗背景，深色模式的白字會看不見，所以預覽一律用淺色外觀。
+            window.appearance = NSAppearance(named: .aqua)
+            window.contentView = NSHostingView(rootView: content
+                .environmentObject(engine)
+                .environmentObject(devices)
+                .environmentObject(equalizer)
+                .environmentObject(mixer)
+                .environmentObject(updater))
+            window.setFrameTopLeftPoint(origin)
+            window.orderFrontRegardless()
+            previewWindows.append(window)
+        }
+        show("SoundDeck", MenuView(), at: NSPoint(x: 60, y: 900))
+        show(L("等化器"), EQEditorView(), at: NSPoint(x: 420, y: 900))
+
+        // --preview-snapshot <資料夾>：幾秒後把兩個視窗的畫面存成 PNG（不需要螢幕錄製權限）。
+        if let index = CommandLine.arguments.firstIndex(of: "--preview-snapshot"),
+           index + 1 < CommandLine.arguments.count {
+            let folder = URL(fileURLWithPath: CommandLine.arguments[index + 1])
+            DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [previewWindows] in
+                for (number, window) in previewWindows.enumerated() {
+                    guard let view = window.contentView,
+                          let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { continue }
+                    view.cacheDisplay(in: view.bounds, to: bitmap)
+                    let file = folder.appendingPathComponent("preview-\(number).png")
+                    try? bitmap.representation(using: .png, properties: [:])?.write(to: file)
                 }
             }
         }

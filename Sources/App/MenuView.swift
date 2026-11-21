@@ -100,6 +100,7 @@ struct MenuView: View {
 // MARK: - 頁尾
 
 private struct FooterSection: View {
+    @EnvironmentObject private var updater: Updater
     private static let info = Bundle.main.infoDictionary ?? [:]
     static let versionText = "v" + (info["CFBundleShortVersionString"] as? String ?? "?")
     static let buildNumber = info["CFBundleVersion"] as? String ?? "?"
@@ -118,16 +119,26 @@ private struct FooterSection: View {
 
                 Spacer()
 
-                Text(Self.versionText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .help("建置編號 \(Self.buildNumber)")
-
                 Button("結束") {
                     NSApplication.shared.terminate(nil)
                 }
                 .help("結束 SoundDeck，聲音會恢復成系統原本的輸出。")
             }
+
+            HStack(spacing: 6) {
+                Text(Self.versionText)
+                    .help(L("建置編號 %@", Self.buildNumber))
+                if updater.isConfigured {
+                    Text("·")
+                    Button("檢查更新…") {
+                        updater.checkForUpdates()
+                    }
+                    .buttonStyle(.borderless)
+                    .disabled(!updater.canCheckForUpdates)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
 
             if let message = loginItem.message {
                 Text(message)
@@ -145,6 +156,11 @@ private struct FooterSection: View {
 private struct VolumeSection: View {
     @EnvironmentObject private var engine: AudioEngine
     @EnvironmentObject private var devices: DeviceManager
+
+    private var isProcessing: Bool {
+        if case .running = engine.status { return true }
+        return false
+    }
 
     /// 軟體音量是在我們的管線裡做的，音訊處理沒開就不會生效。
     private var softwareVolumeUnavailable: Bool {
@@ -175,10 +191,12 @@ private struct VolumeSection: View {
                     .frame(width: 36, alignment: .trailing)
             }
 
+            BalanceRow(isAvailable: isProcessing)
+
             if let device = devices.currentDevice, !device.hasHardwareVolume {
                 Text(softwareVolumeUnavailable
-                    ? "這個裝置本身沒有音量控制，啟用音訊處理後才能在這裡調整。"
-                    : "這個裝置本身沒有音量控制，目前使用軟體音量。")
+                    ? L("這個裝置本身沒有音量控制，啟用音訊處理後才能在這裡調整。")
+                    : L("這個裝置本身沒有音量控制，目前使用軟體音量。"))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -191,6 +209,53 @@ private struct VolumeSection: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
+    }
+}
+
+/// 左右聲道平衡。在 SoundDeck 的管線裡處理，所以只有音訊處理運作中才能調整。
+private struct BalanceRow: View {
+    @EnvironmentObject private var devices: DeviceManager
+    let isAvailable: Bool
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("左")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Slider(
+                value: Binding(
+                    get: { Double(devices.balance) },
+                    // 靠近中間時吸附到正中央，方便回到置中。
+                    set: { devices.setBalance(abs($0) < 0.06 ? 0 : Float(($0 * 100).rounded() / 100)) }
+                ),
+                in: -1...1
+            )
+            .controlSize(.small)
+            .disabled(devices.currentDevice == nil || !isAvailable)
+            .accessibilityLabel("左右平衡")
+            .accessibilityValue(caption)
+            Text("右")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .frame(width: 16)
+            Button(caption) {
+                devices.setBalance(0)
+            }
+            .buttonStyle(.borderless)
+            .font(.caption)
+            .monospacedDigit()
+            .foregroundStyle(devices.balance == 0 ? .secondary : .primary)
+            .frame(width: 52, alignment: .trailing)
+            .disabled(devices.balance == 0 || !isAvailable)
+            .help("按一下回到置中")
+        }
+    }
+
+    private var caption: String {
+        let percent = Int((abs(devices.balance) * 100).rounded())
+        if percent == 0 { return L("置中") }
+        return devices.balance < 0 ? L("左 %d%%", percent) : L("右 %d%%", percent)
     }
 }
 

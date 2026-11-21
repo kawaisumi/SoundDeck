@@ -28,10 +28,18 @@ fi
 BIN="$(swift build -c "$CONFIG" ${ARCH_FLAGS[@]+"${ARCH_FLAGS[@]}"} --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Frameworks"
 cp "$BIN/SoundDeck" "$APP/Contents/MacOS/SoundDeck"
 cp Resources/Info.plist "$APP/Contents/Info.plist"
 cp Resources/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+# 介面翻譯（en.lproj、zh-Hant.lproj）
+for LPROJ in Resources/*.lproj; do
+    [ -d "$LPROJ" ] && cp -R "$LPROJ" "$APP/Contents/Resources/"
+done
+
+# 自動更新用的 Sparkle.framework。執行檔預設只會在自己旁邊找框架，要另外告訴它去 Frameworks 找。
+cp -R "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/"
+install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/SoundDeck" 2>/dev/null || true
 
 IDENTITY="${SOUNDDECK_SIGN_IDENTITY:-}"
 if [ -z "$IDENTITY" ]; then
@@ -41,6 +49,15 @@ if [ -z "$IDENTITY" ]; then
         IDENTITY="-"
     fi
 fi
+# 由內而外簽章：Sparkle 內部的元件 → Sparkle.framework → App 本身。
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework/Versions/B"
+for ITEM in "$SPARKLE/XPCServices/Installer.xpc" "$SPARKLE/XPCServices/Downloader.xpc" \
+            "$SPARKLE/Autoupdate" "$SPARKLE/Updater.app"; do
+    if [ -e "$ITEM" ]; then
+        codesign --force --sign "$IDENTITY" --preserve-metadata=entitlements "$ITEM"
+    fi
+done
+codesign --force --sign "$IDENTITY" "$APP/Contents/Frameworks/Sparkle.framework"
 codesign --force --sign "$IDENTITY" "$APP"
 
 echo "已產生 ${APP}（架構：$(lipo -archs "$APP/Contents/MacOS/SoundDeck")，簽章：${IDENTITY}）"

@@ -37,6 +37,7 @@ public final class AudioEngine: ObservableObject {
     private var routing = MixerRouting.empty(slotCount: AudioEngine.slotCount)
     private var equalizers: [String: EQSettings] = [:]
     private var fallbackEqualizer = EQSettings.flat
+    private var spectrumEnabled = false
 
     /// 每次從外部要求重建就加一，用來作廢過期的延遲重建與重試。
     private var generation = 0
@@ -127,9 +128,32 @@ public final class AudioEngine: ObservableObject {
             .map { ($0.value.info.deviceName, $0.value.readSlotPeaks()) }
     }
 
+    /// 開始或停止收集頻譜資料。只有畫面上真的顯示頻譜時才開，平常不多花運算。
+    public func setSpectrumEnabled(_ enabled: Bool) {
+        lock.lock()
+        defer { lock.unlock() }
+        spectrumEnabled = enabled
+        pipelines.values.forEach { $0.setSpectrumEnabled(enabled) }
+    }
+
+    /// 某個輸出裝置最近播出的聲音（處理後、左右平均）；`uid` 為 nil 表示系統預設輸出。
+    /// 該裝置目前沒有管線時回傳 nil。
+    public func readSpectrumSamples(deviceUID uid: String?, count: Int) -> [Float]? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let key = uid ?? primaryUID, let pipeline = pipelines[key] else { return nil }
+        return pipeline.readSpectrumSamples(count: count)
+    }
+
     // MARK: - 設定
 
     /// 設定軟體音量的增益。該裝置目前沒有管線時不做事（管線建立時會自己讀取記住的音量）。
+    func setBalance(_ balance: Float, forDeviceUID uid: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        pipelines[uid]?.setBalance(balance)
+    }
+
     func setSoftwareGain(_ gain: Float, forDeviceUID uid: String) {
         lock.lock()
         defer { lock.unlock() }
@@ -243,7 +267,7 @@ public final class AudioEngine: ObservableObject {
             outputDevice: outputDevice, sourceDeviceUID: sourceUID, ownProcess: ownProcess,
             slotProcesses: Array(repeating: [], count: Self.slotCount),
             excluded: excluded, slotGains: gains,
-            initialGain: gain, equalizer: equalizer
+            initialGain: gain, initialBalance: BalanceStore.balance(forUID: uid), equalizer: equalizer
         )
     }
 
@@ -286,6 +310,7 @@ public final class AudioEngine: ObservableObject {
                 try primary.start()
 
                 self.lock.lock()
+                primary.setSpectrumEnabled(self.spectrumEnabled)
                 self.pipelines[uid] = primary
                 self.primaryUID = uid
                 self.applyRoutingLocked()
@@ -355,6 +380,7 @@ public final class AudioEngine: ObservableObject {
                 lock.lock()
                 // 建立期間主管線可能已經換掉（預設裝置改變），那這條的來源就不對了，丟棄。
                 if primaryUID == sourceUID, pipelines[uid] == nil {
+                    pipeline.setSpectrumEnabled(spectrumEnabled)
                     pipelines[uid] = pipeline
                     applyRoutingLocked()
                     lock.unlock()
@@ -399,7 +425,7 @@ public final class AudioEngine: ObservableObject {
 
         if tripped {
             Log.error("偵測到訊號暴衝，已停用音訊處理")
-            disable(because: "偵測到音量異常暴衝（可能是與其他音訊工具形成回授），已自動停用。")
+            disable(because: L("偵測到音量異常暴衝（可能是與其他音訊工具形成回授），已自動停用。"))
             return
         }
 
@@ -430,7 +456,7 @@ public final class AudioEngine: ObservableObject {
         generation += 1
         let generation = self.generation
         workQueue.async { [weak self] in self?.takeAllPipelines().forEach { $0.stop() } }
-        status = .failed("系統沒有送出任何音訊，通常是因為還沒有允許「系統音訊錄製」權限。允許後會自動開始。")
+        status = .failed(L("系統沒有送出任何音訊，通常是因為還沒有允許「系統音訊錄製」權限。允許後會自動開始。"))
         perform(generation: generation, attempt: 0, after: Self.permissionRetryInterval, failure: nil)
     }
 

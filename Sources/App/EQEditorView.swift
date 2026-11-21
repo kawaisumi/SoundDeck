@@ -9,6 +9,7 @@ struct EQEditorView: View {
     @EnvironmentObject private var equalizer: EqualizerController
     @State private var selectedBand: EQBand.ID?
     @State private var isImporting = false
+    @AppStorage("showSpectrum") private var showsSpectrum = true
 
     /// 曲線依實際輸出的取樣率計算；還沒有管線時用最常見的 48 kHz。
     private var sampleRate: Double {
@@ -20,13 +21,23 @@ struct EQEditorView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
 
-            EQCurveView(sampleRate: sampleRate, selectedBand: $selectedBand)
+            EQCurveView(sampleRate: sampleRate, selectedBand: $selectedBand, showsSpectrum: showsSpectrum)
                 .frame(height: 260)
                 .opacity(equalizer.settings.isBypassed ? 0.45 : 1)
+                .onAppear { engine.setSpectrumEnabled(showsSpectrum) }
+                .onDisappear { engine.setSpectrumEnabled(false) }
+                .onChange(of: showsSpectrum) { _, show in engine.setSpectrumEnabled(show) }
 
-            Text("拖曳控制點調整頻率與增益 · 按住 Shift 微調 · 雙擊將增益歸零")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            HStack {
+                Text("拖曳控制點調整頻率與增益 · 按住 Shift 微調 · 雙擊將增益歸零")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Toggle("顯示頻譜", isOn: $showsSpectrum)
+                    .toggleStyle(.checkbox)
+                    .font(.caption)
+                    .help("在曲線後面即時顯示目前播出的聲音在各頻率的音量，方便找出要加強或衰減的頻段。只有這個裝置正在播放時才會有圖。")
+            }
 
             preampRow
 
@@ -55,7 +66,7 @@ struct EQEditorView: View {
                 set: { equalizer.select(deviceUID: $0.isEmpty ? nil : $0) }
             )) {
                 ForEach(devices.devices) { device in
-                    Text(device.id == devices.currentDeviceID ? "\(device.name)（目前輸出）" : device.name)
+                    Text(device.id == devices.currentDeviceID ? L("%@（目前輸出）", device.name) : device.name)
                         .tag(device.uid)
                 }
             }
@@ -178,7 +189,7 @@ struct EQPresetMenu: View {
                 .disabled(equalizer.customPresets.isEmpty)
             }
         } label: {
-            Text(equalizer.matchingPreset?.name ?? "自訂")
+            Text(equalizer.matchingPreset?.name ?? L("自訂"))
         }
         .accessibilityLabel("預設組")
         .sheet(isPresented: $isManaging) {
@@ -277,8 +288,8 @@ private struct EQPresetManagerRow: View {
             } label: {
                 Image(systemName: "trash")
             }
-            .help("刪除「\(preset.name)」")
-            .accessibilityLabel("刪除 \(preset.name)")
+            .help(L("刪除「%@」", preset.name))
+            .accessibilityLabel(L("刪除 %@", preset.name))
         }
     }
 
@@ -301,7 +312,7 @@ private struct EQBandRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            Toggle("啟用頻段 \(index + 1)", isOn: binding(\.isEnabled))
+            Toggle(L("啟用頻段 %d", index + 1), isOn: binding(\.isEnabled))
                 .labelsHidden()
             Text("\(index + 1)")
                 .font(.caption.weight(.semibold))
@@ -350,7 +361,7 @@ private struct EQBandRow: View {
             }
             .buttonStyle(.borderless)
             .help("刪除這個頻段")
-            .accessibilityLabel("刪除頻段 \(index + 1)")
+            .accessibilityLabel(L("刪除頻段 %d", index + 1))
         }
         .padding(.vertical, 3)
         .padding(.horizontal, 6)
@@ -423,12 +434,12 @@ enum EQPalette {
 extension EQBand.Kind {
     var displayName: String {
         switch self {
-        case .peak: return "鐘形 (Peak)"
-        case .lowShelf: return "低頻擱架"
-        case .highShelf: return "高頻擱架"
-        case .highPass: return "高通"
-        case .lowPass: return "低通"
-        case .notch: return "陷波"
+        case .peak: return L("鐘形 (Peak)")
+        case .lowShelf: return L("低頻擱架")
+        case .highShelf: return L("高頻擱架")
+        case .highPass: return L("高通")
+        case .lowPass: return L("低通")
+        case .notch: return L("陷波")
         }
     }
 }

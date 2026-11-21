@@ -21,6 +21,8 @@ public final class DeviceManager: ObservableObject {
     @Published public private(set) var currentDeviceID: AudioObjectID?
     /// 目前輸出裝置的主音量（0…1）。
     @Published public private(set) var volume: Float = 1
+    /// 目前輸出裝置的左右平衡（−1 全左、0 置中、1 全右）。
+    @Published public private(set) var balance: Float = 0
     @Published public private(set) var lastError: String?
 
     public var currentDevice: OutputDevice? {
@@ -67,6 +69,14 @@ public final class DeviceManager: ObservableObject {
         }
     }
 
+    public func setBalance(_ newValue: Float) {
+        guard let device = currentDevice else { return }
+        let clamped = min(max(newValue, -1), 1)
+        balance = clamped
+        BalanceStore.setBalance(clamped, forUID: device.uid)
+        engine.setBalance(clamped, forDeviceUID: device.uid)
+    }
+
     // MARK: - 狀態同步
 
     private func refresh() {
@@ -91,6 +101,8 @@ public final class DeviceManager: ObservableObject {
 
     private func syncVolume() {
         guard let device = currentDevice else { return }
+        let savedBalance = BalanceStore.balance(forUID: device.uid)
+        if savedBalance != balance { balance = savedBalance }
         let value = device.hasHardwareVolume
             ? (HAL.hardwareVolume(device.id) ?? volume)
             : SoftwareVolumeStore.volume(forUID: device.uid)

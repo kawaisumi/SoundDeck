@@ -26,3 +26,21 @@ enum SoftwareVolumeStore {
         gain(forVolume: volume(forUID: uid))
     }
 }
+
+/// 左右聲道平衡，依裝置 UID 記住（耳機和喇叭各自的平衡通常不同）。−1 全左、0 置中、1 全右。
+enum BalanceStore {
+    private static let key = "balanceByDeviceUID"
+
+    static func balance(forUID uid: String) -> Float {
+        let table = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+        return Float(min(max(table[uid] ?? 0, -1), 1))
+    }
+
+    static func setBalance(_ balance: Float, forUID uid: String) {
+        var table = UserDefaults.standard.dictionary(forKey: key) as? [String: Double] ?? [:]
+        let clamped = Double(min(max(balance, -1), 1))
+        // 置中就不必記，讓設定檔保持乾淨。
+        table[uid] = clamped == 0 ? nil : clamped
+        UserDefaults.standard.set(table, forKey: key)
+    }
+}

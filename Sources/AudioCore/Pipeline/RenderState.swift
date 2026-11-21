@@ -52,6 +52,13 @@ struct RenderState {
     /// 回授保護是否已觸發。一旦觸發，這條管線只輸出靜音，直到被引擎拆除。
     var tripped: Bool = false
 
+    // 頻譜分析用：處理後的聲音（左右平均）寫進環狀緩衝區，UI 執行緒讀最近的一段來算頻譜。
+    // 只有 EQ 編輯器顯示頻譜時才寫入。兩邊沒有同步，讀到正在被覆寫的一小段只會讓某一格畫面略有誤差。
+    static let spectrumCapacity = 8192 // 2 的次方，方便用位元遮罩取餘數
+    let spectrumBuffer: UnsafeMutablePointer<Float32>
+    var spectrumWriteIndex: Int = 0
+    var spectrumEnabled: Bool = false
+
     init(
         slotLeft: [ChannelRef], slotRight: [ChannelRef], slotGains: [Float],
         outLeft: ChannelRef, outRight: ChannelRef, dsp: DSPKernel
@@ -63,6 +70,8 @@ struct RenderState {
         slotGainTarget = .allocate(capacity: count)
         slotGainCurrent = .allocate(capacity: count)
         slotPeak = .allocate(capacity: count)
+        spectrumBuffer = .allocate(capacity: Self.spectrumCapacity)
+        spectrumBuffer.initialize(repeating: 0, count: Self.spectrumCapacity)
         for index in 0..<count {
             self.slotLeft[index] = slotLeft[index]
             self.slotRight[index] = slotRight[index]
@@ -82,6 +91,7 @@ struct RenderState {
         slotGainTarget.deallocate()
         slotGainCurrent.deallocate()
         slotPeak.deallocate()
+        spectrumBuffer.deallocate()
         dsp.deallocate()
     }
 }
@@ -191,5 +201,16 @@ enum Renderer {
             right: dstR, rightStride: outStrideR,
             frames: outFrames
         )
+
+        if state.pointee.spectrumEnabled {
+            let buffer = state.pointee.spectrumBuffer
+            let mask = RenderState.spectrumCapacity - 1
+            var index = state.pointee.spectrumWriteIndex
+            for frame in 0..<outFrames {
+                buffer[index & mask] = (dstL[frame * outStrideL] + dstR[frame * outStrideR]) * 0.5
+                index &+= 1
+            }
+            state.pointee.spectrumWriteIndex = index
+        }
     }
 }

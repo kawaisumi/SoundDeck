@@ -170,6 +170,21 @@ final class DSPKernelTests: XCTestCase {
         XCTAssertEqual(output.left.suffix(2400).map(abs).max()!, 0.1, accuracy: 0.001)
     }
 
+    func testBalanceAttenuatesOnlyTheOppositeSide() {
+        let kernel = makeKernel()
+        let input = [Float](repeating: 0.4, count: 4096)
+
+        DSPKernel.setBalance(kernel, 0.5) // 偏右：左聲道減半，右聲道不變
+        var output = run(kernel, left: input, right: input)
+        XCTAssertEqual(output.left.last!, 0.2, accuracy: 1e-5)
+        XCTAssertEqual(output.right.last!, 0.4, accuracy: 1e-5)
+
+        DSPKernel.setBalance(kernel, -1) // 全左：右聲道靜音
+        output = run(kernel, left: input, right: input)
+        XCTAssertEqual(output.left.last!, 0.4, accuracy: 1e-5)
+        XCTAssertEqual(output.right.last!, 0, accuracy: 1e-6)
+    }
+
     func testInterleavedStride() {
         let kernel = makeKernel(volume: 0.5)
         // 一個交錯的立體聲緩衝區：L R L R …
@@ -201,6 +216,33 @@ final class ProcessAttributionTests: XCTestCase {
     func testTopLevelAppIsNotAHelper() {
         XCTAssertNil(AudioProcessMonitor.outermostEnclosingApp(of: URL(fileURLWithPath: "/Applications/Discord.app")))
         XCTAssertNil(AudioProcessMonitor.outermostEnclosingApp(of: URL(fileURLWithPath: "/Applications/Utilities/Terminal.app")))
+    }
+}
+
+final class SpectrumAnalyzerTests: XCTestCase {
+    func testFullScaleSineReadsAboutZeroDBAtItsFrequency() {
+        let analyzer = SpectrumAnalyzer(size: 4096)
+        let sampleRate = 48_000.0
+        let frequency = 1500.0 // 剛好落在第 128 格，避免頻譜洩漏影響量測
+        let samples = (0..<4096).map { Float(sin(2 * .pi * frequency * Double($0) / sampleRate)) }
+        let spectrum = analyzer.analyze(samples)
+
+        let peakBin = spectrum.indices.max { spectrum[$0] < spectrum[$1] }!
+        XCTAssertEqual(peakBin, 128)
+        XCTAssertEqual(Double(spectrum[peakBin]), 0, accuracy: 0.5)
+        // 遠離這個頻率的地方應該很安靜。
+        XCTAssertLessThan(spectrum[1000], -80)
+    }
+
+    func testHalfAmplitudeIsSixDBLower() {
+        let analyzer = SpectrumAnalyzer(size: 4096)
+        let samples = (0..<4096).map { Float(0.5 * sin(2 * .pi * 1500 * Double($0) / 48_000)) }
+        XCTAssertEqual(Double(analyzer.analyze(samples)[128]), -6.02, accuracy: 0.5)
+    }
+
+    func testSilenceIsVeryLow() {
+        let spectrum = SpectrumAnalyzer(size: 1024).analyze([Float](repeating: 0, count: 1024))
+        XCTAssertTrue(spectrum.allSatisfy { $0 <= -120 })
     }
 }
 
@@ -300,10 +342,18 @@ final class EQTextFormatTests: XCTestCase {
     }
 
     func testAIPromptExampleIsImportable() throws {
-        let prompt = EQTextFormat.aiPrompt(deviceName: "喇叭", current: nil)
-        let parsed = try EQTextFormat.parse(prompt)
-        XCTAssertEqual(parsed.name, "示範設定")
-        XCTAssertEqual(parsed.bands.count, 4)
-        XCTAssertEqual(parsed.warnings, [])
+        for (language, name) in [(AppLanguage.chinese, "示範設定"), (.english, "Example")] {
+            let prompt = EQTextFormat.aiPrompt(deviceName: "Speaker", current: nil, language: language)
+            let parsed = try EQTextFormat.parse(prompt)
+            XCTAssertEqual(parsed.name, name)
+            XCTAssertEqual(parsed.bands.count, 4)
+            XCTAssertEqual(parsed.warnings, [])
+        }
+    }
+
+    func testEnglishExportUsesNameLine() throws {
+        let text = EQTextFormat.format(.flat, name: "Mine", language: .english)
+        XCTAssertTrue(text.hasPrefix("# Name: Mine"))
+        XCTAssertEqual(try EQTextFormat.parse(text).name, "Mine")
     }
 }

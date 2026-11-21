@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
-	<string>zh-Hant</string>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
 	<string>SoundDeck</string>
 	<key>CFBundleExecutable</key>
@@ -12,6 +12,11 @@
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>local.sounddeck.app</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh-Hant</string>
+	</array>
 	<key>CFBundleName</key>
 	<string>SoundDeck</string>
 	<key>CFBundlePackageType</key>
@@ -28,5 +33,13 @@
 	<string>SoundDeck 需要擷取系統音訊，才能套用等化器並調整各 App 的音量。音訊只在本機即時處理，不會錄製或傳送。</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/kawaisumi/SoundDeck/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>M/Ccn2x9Qm40Ia6YMhyV+jMbH9qJS7D37A0w9BvVCCc=</string>
+	<key>SUScheduledCheckInterval</key>
+	<integer>86400</integer>
 </dict>
 </plist>

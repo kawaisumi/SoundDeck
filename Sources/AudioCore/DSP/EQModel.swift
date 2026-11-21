@@ -121,22 +121,22 @@ public struct EQPreset: Identifiable, Equatable, Codable, Sendable {
     }
 
     public static let builtIn: [EQPreset] = [
-        EQPreset(id: "flat", name: "平坦", bands: EQSettings.flat.bands),
-        EQPreset(id: "bass", name: "低音加強", bands: [
+        EQPreset(id: "flat", name: L("平坦"), bands: EQSettings.flat.bands),
+        EQPreset(id: "bass", name: L("低音加強"), bands: [
             EQBand(kind: .lowShelf, frequency: 100, gainDB: 6, q: 0.71),
             EQBand(kind: .peak, frequency: 250, gainDB: -1.5, q: 1),
             EQBand(kind: .peak, frequency: 1000),
             EQBand(kind: .peak, frequency: 4000),
             EQBand(kind: .highShelf, frequency: 10_000, q: 0.71),
         ]),
-        EQPreset(id: "treble", name: "高音加強", bands: [
+        EQPreset(id: "treble", name: L("高音加強"), bands: [
             EQBand(kind: .lowShelf, frequency: 80, q: 0.71),
             EQBand(kind: .peak, frequency: 250),
             EQBand(kind: .peak, frequency: 1000),
             EQBand(kind: .peak, frequency: 4000, gainDB: 2, q: 1),
             EQBand(kind: .highShelf, frequency: 8000, gainDB: 5, q: 0.71),
         ]),
-        EQPreset(id: "vocal", name: "人聲清晰", bands: [
+        EQPreset(id: "vocal", name: L("人聲清晰"), bands: [
             EQBand(kind: .highPass, frequency: 80, q: 0.71),
             EQBand(kind: .peak, frequency: 250, gainDB: -2, q: 1.2),
             EQBand(kind: .peak, frequency: 1000),
@@ -146,7 +146,7 @@ public struct EQPreset: Identifiable, Equatable, Codable, Sendable {
         // 女聲主唱的樂團與流行歌：鼓的輪廓清楚、人聲飽滿。
         // 針對內建小口徑重低音的 soundbar（頻率響應下限約 50–60 Hz）調整，
         // 依常見的單體配置推算，沒有用實測曲線校正。
-        EQPreset(id: "band", name: "樂團", bands: [
+        EQPreset(id: "band", name: L("樂團"), bands: [
             EQBand(kind: .highPass, frequency: 40, q: 0.71),             // 喇叭發不出來的超低頻不要送，省下餘裕
             EQBand(kind: .peak, frequency: 90, gainDB: 3, q: 1),         // 大鼓的力道，落在小重低音發得出來的範圍
             EQBand(kind: .peak, frequency: 250, gainDB: -1, q: 1.4),     // 稍微減少混濁，讓鼓和貝斯分得開
@@ -154,7 +154,7 @@ public struct EQPreset: Identifiable, Equatable, Codable, Sendable {
             EQBand(kind: .peak, frequency: 3000, gainDB: 1.5, q: 1),     // 人聲的清晰度、小鼓的擊點
             EQBand(kind: .highShelf, frequency: 9000, gainDB: 2, q: 0.71), // 銅鈸與腳踏鈸的空氣感
         ]),
-        EQPreset(id: "loudness", name: "小音量補償", bands: [
+        EQPreset(id: "loudness", name: L("小音量補償"), bands: [
             EQBand(kind: .lowShelf, frequency: 120, gainDB: 5, q: 0.71),
             EQBand(kind: .peak, frequency: 250),
             EQBand(kind: .peak, frequency: 1000, gainDB: -1, q: 0.8),

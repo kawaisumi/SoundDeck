@@ -64,7 +64,7 @@ public final class MixerController: ObservableObject {
         isPerAppRoutingEnabled = UserDefaults.standard.bool(forKey: Self.routingEnabledKey)
         let otherSaved = saved[Self.otherID] ?? Saved()
         other = MixerChannel(
-            id: Self.otherID, name: "系統音效與其他", bundleURL: nil,
+            id: Self.otherID, name: L("系統音效與其他"), bundleURL: nil,
             volume: otherSaved.volume, isMuted: otherSaved.isMuted, isPlaying: false,
             deviceUID: nil, slot: 0
         )

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>SoundDeck</title>
+        <description>SoundDeck 的更新資訊。由 Scripts/release.sh 自動更新，請不要手動修改。</description>
+        <language>zh-Hant</language>
+    </channel>
+</rss>

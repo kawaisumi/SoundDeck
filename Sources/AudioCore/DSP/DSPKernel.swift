@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// 即時執行緒上的訊號處理：前級 → 參數式 EQ → Limiter → 音量。
+/// 即時執行緒上的訊號處理：前級 → 參數式 EQ → Limiter → 音量與左右平衡。
 ///
 /// 這個 struct 放在手動配置的記憶體裡，內部只有純值與指標，`process` 不配置記憶體、不阻塞。
 /// UI 執行緒透過 `update` / `setVolume` 送入新參數：兩邊用一把 `os_unfair_lock` 交接，
@@ -22,6 +22,7 @@ struct DSPKernel {
     private var pendingBandCount = 0
     private var pendingPreamp: Double = 1
     private var pendingVolume: Double = 1
+    private var pendingBalance: Double = 0
     private var dirty = false
 
     // MARK: EQ 狀態（只有即時執行緒使用）
@@ -39,6 +40,9 @@ struct DSPKernel {
     private var preampTarget: Double = 1
     private var volume: Double = 1
     private var volumeTarget: Double = 1
+    /// −1（全左）…0（置中）…1（全右）。
+    private var balance: Double = 0
+    private var balanceTarget: Double = 0
 
     // MARK: Limiter 狀態（只有即時執行緒使用）
 
@@ -56,7 +60,7 @@ struct DSPKernel {
     private var limiterGain: Double = 1
     private let releaseCoefficient: Double
 
-    init(sampleRate: Double, initialVolume: Double) {
+    init(sampleRate: Double, initialVolume: Double, initialBalance: Double = 0) {
         let coefficientCount = Self.maxBands * Self.coefficientsPerBand
 
         lock = .allocate(capacity: 1)
@@ -95,6 +99,11 @@ struct DSPKernel {
         pendingVolume = clampedVolume
         volume = clampedVolume
         volumeTarget = clampedVolume
+
+        let clampedBalance = initialBalance.clamped(to: -1...1)
+        pendingBalance = clampedBalance
+        balance = clampedBalance
+        balanceTarget = clampedBalance
     }
 
     /// 釋放所有緩衝區。呼叫前必須確定即時執行緒已經不會再進來。
@@ -136,6 +145,13 @@ struct DSPKernel {
     }
 
     /// 設定最末端的音量（線性，0…1）。
+    /// 設定左右平衡：−1 只剩左聲道、0 置中、1 只剩右聲道。偏向一邊時只降低另一邊，偏向的那邊維持原音量。
+    static func setBalance(_ kernel: UnsafeMutablePointer<DSPKernel>, _ balance: Double) {
+        os_unfair_lock_lock(kernel.pointee.lock)
+        kernel.pointee.pendingBalance = balance.clamped(to: -1...1)
+        os_unfair_lock_unlock(kernel.pointee.lock)
+    }
+
     static func setVolume(_ kernel: UnsafeMutablePointer<DSPKernel>, _ volume: Double) {
         os_unfair_lock_lock(kernel.pointee.lock)
         kernel.pointee.pendingVolume = volume.clamped(to: 0...1)
@@ -169,11 +185,13 @@ struct DSPKernel {
                 ramping = true
             }
             volumeTarget = pendingVolume
+            balanceTarget = pendingBalance
             os_unfair_lock_unlock(lock)
         }
 
         let preampStep = (preampTarget - preamp) / Double(frames)
         let volumeStep = (volumeTarget - volume) / Double(frames)
+        let balanceStep = (balanceTarget - balance) / Double(frames)
         let threshold = Self.limiterThreshold
         let k = lookahead
         let windowLength = k * 2
@@ -247,13 +265,17 @@ struct DSPKernel {
 
             // 4. 音量，以及理論上不會觸發的最後一道上限。
             volume += volumeStep
+            balance += balanceStep
             let gain = limiterGain * volume
-            left[frame * leftStride] = Float32((delayedL * gain).clamped(to: -1...1))
-            right[frame * rightStride] = Float32((delayedR * gain).clamped(to: -1...1))
+            let leftGain = gain * min(1, 1 - balance)
+            let rightGain = gain * min(1, 1 + balance)
+            left[frame * leftStride] = Float32((delayedL * leftGain).clamped(to: -1...1))
+            right[frame * rightStride] = Float32((delayedR * rightGain).clamped(to: -1...1))
         }
 
         preamp = preampTarget
         volume = volumeTarget
+        balance = balanceTarget
 
         if ramping {
             ramping = false

@@ -8,7 +8,8 @@ public struct CoreAudioError: Error, CustomStringConvertible {
     public let operation: String
 
     public var description: String {
-        "\(operation)失敗（OSStatus \(status) \(Self.fourCC(status))）"
+        // operation 是中文原文，顯示時才翻譯，這樣各處呼叫時不必每次都包一層 L(…)。
+        L("%@失敗（OSStatus %ld %@）", L(operation), Int(status), Self.fourCC(status))
     }
 
     private static func fourCC(_ status: OSStatus) -> String {
@@ -223,7 +224,7 @@ enum HAL {
     }
 
     static func deviceName(_ device: AudioObjectID) -> String {
-        (try? readString(device, kAudioObjectPropertyName, "讀取裝置名稱")) ?? "未知裝置"
+        (try? readString(device, kAudioObjectPropertyName, "讀取裝置名稱")) ?? L("未知裝置")
     }
 
     static func sampleRate(_ device: AudioObjectID) throws -> Double {

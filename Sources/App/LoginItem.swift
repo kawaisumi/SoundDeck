@@ -1,3 +1,4 @@
+import AudioCore
 import Combine
 import Foundation
 import ServiceManagement
@@ -20,7 +21,7 @@ final class LoginItem: ObservableObject {
             message = nil
         case .requiresApproval:
             isEnabled = false
-            message = "需要到「系統設定 → 一般 → 登入項目與延伸功能」允許 SoundDeck。"
+            message = L("需要到「系統設定 → 一般 → 登入項目與延伸功能」允許 SoundDeck。")
         default:
             isEnabled = false
         }
@@ -35,7 +36,7 @@ final class LoginItem: ObservableObject {
             }
             message = nil
         } catch {
-            message = "無法變更登入項目：\(error.localizedDescription)"
+            message = L("無法變更登入項目：%@", error.localizedDescription)
         }
         let failure = message
         refresh()
@@ -43,7 +44,7 @@ final class LoginItem: ObservableObject {
 
         // 登入項目記的是 App 目前的位置；從建置資料夾執行時，重新建置或搬動後可能失效。
         if isEnabled, !Bundle.main.bundlePath.hasPrefix("/Applications/") {
-            message = "目前是從建置資料夾執行。建議先用 Scripts/install.sh 安裝到「應用程式」再開啟這個選項，否則重新建置後可能失效。"
+            message = L("目前是從建置資料夾執行。建議先用 Scripts/install.sh 安裝到「應用程式」再開啟這個選項，否則重新建置後可能失效。")
         }
     }
 }

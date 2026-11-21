@@ -87,7 +87,7 @@ struct EQImportView: View {
             }
 
             HStack {
-                Text(deviceName.map { "會套用到「\($0)」的等化器。" } ?? "會套用到目前的等化器。")
+                Text(deviceName.map { L("會套用到「%@」的等化器。", $0) } ?? L("會套用到目前的等化器。"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()
@@ -126,12 +126,12 @@ struct EQImportView: View {
                 .fixedSize(horizontal: false, vertical: true)
             HStack {
                 Button {
-                    copy(EQTextFormat.aiPrompt(deviceName: deviceName, current: equalizer.settings), message: "已複製範本")
+                    copy(EQTextFormat.aiPrompt(deviceName: deviceName, current: equalizer.settings, language: .current), message: L("已複製範本"))
                 } label: {
                     Label("複製給 AI 的範本", systemImage: "doc.on.doc")
                 }
                 Button {
-                    copy(EQTextFormat.format(equalizer.settings, name: equalizer.matchingPreset?.name), message: "已複製目前的設定")
+                    copy(EQTextFormat.format(equalizer.settings, name: equalizer.matchingPreset?.name, language: .current), message: L("已複製目前的設定"))
                 } label: {
                     Label("複製目前的設定", systemImage: "square.and.arrow.up")
                 }
@@ -181,27 +181,33 @@ struct EQImportView: View {
     }
 
     private func summary(of result: EQTextFormat.Parsed) -> String {
-        var text = "找到 \(result.bands.count) 個頻段"
         if let preamp = result.preampDB {
-            text += String(format: "。檔案的前級增益 %+.1f dB 僅供參考，匯入後改由自動補償計算", preamp)
+            return L("找到 %d 個頻段。檔案的前級增益 %+.1f dB 僅供參考，匯入後改由自動補償計算。", result.bands.count, preamp)
         }
-        return text + "。"
+        return L("找到 %d 個頻段。", result.bands.count)
+    }
+
+    /// 讓預覽的各欄對齊：中文用全形空白補到 4 個字，英文用半形空白補到 10 個字元。
+    private func padded(_ kind: String) -> String {
+        AppLanguage.current == .english
+            ? kind.padding(toLength: 10, withPad: " ", startingAt: 0)
+            : kind.padding(toLength: 4, withPad: "　", startingAt: 0)
     }
 
     private func describe(_ band: EQBand, index: Int) -> String {
         let gain = band.kind.hasGain ? String(format: "%+5.1f dB", band.gainDB) : "        "
         let kind: String
         switch band.kind {
-        case .peak: kind = "鐘形"
-        case .lowShelf: kind = "低頻擱架"
-        case .highShelf: kind = "高頻擱架"
-        case .highPass: kind = "高通"
-        case .lowPass: kind = "低通"
-        case .notch: kind = "陷波"
+        case .peak: kind = L("鐘形")
+        case .lowShelf: kind = L("低頻擱架")
+        case .highShelf: kind = L("高頻擱架")
+        case .highPass: kind = L("高通")
+        case .lowPass: kind = L("低通")
+        case .notch: kind = L("陷波")
         }
         return String(format: "%2d  %@  %6.0f Hz  %@  Q %.2f%@",
-                      index + 1, kind.padding(toLength: 4, withPad: "　", startingAt: 0),
-                      band.frequency, gain, band.q, band.isEnabled ? "" : "（停用）")
+                      index + 1, padded(kind),
+                      band.frequency, gain, band.q, band.isEnabled ? "" : L("（停用）"))
     }
 
     // MARK: - 動作
@@ -217,7 +223,7 @@ struct EQImportView: View {
 
     private func pasteFromClipboard() {
         guard let string = NSPasteboard.general.string(forType: .string), !string.isEmpty else {
-            fileError = "剪貼簿裡沒有文字。"
+            fileError = L("剪貼簿裡沒有文字。")
             return
         }
         fileError = nil
@@ -237,7 +243,7 @@ struct EQImportView: View {
                 name = parsed?.name ?? base.replacingOccurrences(of: " ParametricEQ", with: "")
             }
         } catch {
-            fileError = "無法讀取檔案：\(error.localizedDescription)"
+            fileError = L("無法讀取檔案：%@", error.localizedDescription)
         }
     }
 
