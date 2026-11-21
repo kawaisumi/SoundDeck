@@ -37,6 +37,14 @@ for LPROJ in Resources/*.lproj; do
     [ -d "$LPROJ" ] && cp -R "$LPROJ" "$APP/Contents/Resources/"
 done
 
+# 授權條款：SoundDeck 本身與內含的 Sparkle（MIT 授權要求散布時附上原文）。
+mkdir -p "$APP/Contents/Resources/Licenses"
+cp LICENSE "$APP/Contents/Resources/Licenses/SoundDeck-LICENSE.txt"
+SPARKLE_LICENSE=".build/artifacts/sparkle/Sparkle/LICENSE"
+if [ -f "$SPARKLE_LICENSE" ]; then
+    cp "$SPARKLE_LICENSE" "$APP/Contents/Resources/Licenses/Sparkle-LICENSE.txt"
+fi
+
 # 自動更新用的 Sparkle.framework。執行檔預設只會在自己旁邊找框架，要另外告訴它去 Frameworks 找。
 cp -R "$BIN/Sparkle.framework" "$APP/Contents/Frameworks/"
 install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/SoundDeck" 2>/dev/null || true

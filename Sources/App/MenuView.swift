@@ -125,6 +125,16 @@ private struct FooterSection: View {
                 .help("結束 SoundDeck，聲音會恢復成系統原本的輸出。")
             }
 
+            if updater.isConfigured {
+                Toggle("自動檢查更新", isOn: Binding(
+                    get: { updater.automaticallyChecksForUpdates },
+                    set: { updater.automaticallyChecksForUpdates = $0 }
+                ))
+                .toggleStyle(.checkbox)
+                .font(.callout)
+                .help("每天向 GitHub 檢查一次有沒有新版本。這是 SoundDeck 唯一會連網的功能；關閉後，除非你手動按「檢查更新…」，SoundDeck 完全不會連網。")
+            }
+
             HStack(spacing: 6) {
                 Text(Self.versionText)
                     .help(L("建置編號 %@", Self.buildNumber))

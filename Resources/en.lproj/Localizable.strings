@@ -160,3 +160,5 @@
 "啟動音訊裝置" = "Starting the audio device";
 "建立 process tap" = "Creating the process tap";
 "讀取 tap 格式" = "Reading the tap format";
+"自動檢查更新" = "Check for updates automatically";
+"每天向 GitHub 檢查一次有沒有新版本。這是 SoundDeck 唯一會連網的功能；關閉後，除非你手動按「檢查更新…」，SoundDeck 完全不會連網。" = "Checks GitHub once a day for a new version. This is the only feature in SoundDeck that uses the network; when it's off, SoundDeck never connects to the internet unless you click “Check for Updates…”.";

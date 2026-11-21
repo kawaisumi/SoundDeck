@@ -25,7 +25,7 @@
 | **輸出裝置管理** | 一鍵切換系統輸出；HDMI 螢幕等沒有音量控制的裝置也能調音量（自動改用軟體音量） |
 | **左右聲道平衡** | 每個輸出裝置各自記住 |
 | **限幅器** | EQ 加強或 App 音量超過 100% 時，把峰值壓在 −1 dBFS 以下，避免爆音 |
-| **自動更新** | 有新版時提示下載安裝 |
+| **自動更新** | 有新版時提示下載安裝（可關閉） |
 | **其他** | 開機自動啟動、休眠喚醒後自動恢復、音量異常暴衝時自動停用 |
 
 介面有繁體中文與英文，依系統語言自動切換；其他語言的系統會顯示英文。
@@ -46,7 +46,8 @@
    1. 按「完成」關掉提示。
    2. 打開「**系統設定 → 隱私權與安全性**」，捲到最下面，在 SoundDeck 的訊息旁按「**仍要打開**」（Open Anyway），再輸入登入密碼確認。
    3. 之後就可以正常打開，不會再出現這個提示。
-4. 系統會詢問是否允許 SoundDeck 錄製**系統音訊**，請按「允許」。沒有這個權限就無法處理聲音。
+4. 系統會詢問是否允許 SoundDeck 錄製**系統音訊**，請按「允許」。沒有這個權限就無法處理聲音，
+   原因與 SoundDeck 如何使用它，見下方的[隱私](#隱私)。
 5. 選單列出現 SoundDeck 的圖示（三條垂直推桿）就代表開始運作了。
 
 之後有新版本時，SoundDeck 會自動提示，按「安裝更新」即可，不需要再重新下載 dmg。
@@ -60,6 +61,34 @@
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/SoundDeck.app
 > ```
+
+## 隱私
+
+SoundDeck 需要「螢幕與系統音訊錄製」權限，看起來像是會錄音，所以這裡說清楚它做什麼、不做什麼。
+
+**為什麼需要這個權限**：等化器和混音器要先拿到各 App 的聲音，才能調整後再播出來。macOS 規定，
+任何要讀取別的 App 聲音的程式都必須取得這個權限，同類的工具也都一樣
+（eqMac 用同一個權限；改用虛擬音訊驅動的工具則是改要麥克風權限）。
+
+**SoundDeck 不會做的事**
+
+- 不會把聲音存成檔案。聲音只在記憶體裡即時處理，處理完就直接送到喇叭。
+- 不會把聲音或任何個人資料傳到網路上。
+- 不收集使用統計，也沒有任何分析或廣告套件。
+
+**唯一會連網的功能是自動更新**：每天向 GitHub 下載一次 `appcast.xml` 檢查有沒有新版，
+有新版時再從 GitHub Releases 下載 dmg。不會附帶任何系統資訊（已關閉 Sparkle 的系統資訊回報）。
+在控制面板底部取消「自動檢查更新」後，除非你手動按「檢查更新…」，SoundDeck 完全不會連網。
+
+**怎麼自己確認**
+
+- 程式碼全部公開。和網路有關的只有 [`Sources/App/Updater.swift`](Sources/App/Updater.swift) 裡呼叫 Sparkle 的部分；
+  其餘程式碼沒有任何連網或寫入音訊檔的程式。
+- 可以用 [LuLu](https://objective-see.org/products/lulu.html)、Little Snitch 這類防火牆觀察：
+  SoundDeck 只會連到 `raw.githubusercontent.com`（檢查更新）與 `github.com`（下載更新）。
+- 可以從原始碼自己建置，或比對 Release 附上的 SHA-256 校驗碼，確認下載的檔案沒有被改過。
+- 權限隨時可以在「系統設定 → 隱私權與安全性 → 螢幕與系統音訊錄製」關閉。
+  關閉後 SoundDeck 收不到任何聲音，聲音會直接照原本的方式播放。
 
 ### 從原始碼建置
 
@@ -293,6 +322,7 @@ SoundDeck/
 │   └── App/                       # SwiftUI：選單列面板、混音器、EQ 編輯器、自動更新
 ├── Tests/AudioCoreTests/          # DSP、匯入格式與歸屬判定的單元測試
 ├── Resources/                     # Info.plist、App 圖示、en.lproj／zh-Hant.lproj 翻譯
+├── LICENSE                        # MIT 授權
 └── Scripts/                       # 建置、打包、簽章、圖示
 ```
 
@@ -395,7 +425,14 @@ open build/SoundDeck.app --args --log-stats --route-test <App 的 bundle ID> <�
 - 依 App 獨立的 EQ
 - 圖形式 EQ（固定 10 段的簡易介面）
 
-## 參考資料
+## 參考資料與致謝
 
+- [Sparkle](https://sparkle-project.org)：自動更新（MIT 授權，授權全文附在 App 內的 `Contents/Resources/Licenses/`）
+- [AutoEQ](https://github.com/jaakkopasanen/AutoEq)：耳機校正資料的格式
 - [Audio EQ Cookbook](https://webaudio.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html)（Robert Bristow-Johnson）：biquad 濾波器係數公式
 - Apple Core Audio：`AudioHardwareCreateProcessTap`、`CATapDescription`（見 SDK 中的 `AudioHardwareTapping.h`、`CATapDescription.h`）
+
+## 授權
+
+[MIT License](LICENSE)。可以自由使用、修改與散布，包含商業用途，只要保留原本的版權與授權聲明。
+本軟體按現狀提供，不提供任何擔保。

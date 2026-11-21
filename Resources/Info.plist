@@ -35,6 +35,8 @@
 	<string>NSApplication</string>
 	<key>SUEnableAutomaticChecks</key>
 	<true/>
+	<key>SUEnableSystemProfiling</key>
+	<false/>
 	<key>SUFeedURL</key>
 	<string>https://raw.githubusercontent.com/kawaisumi/SoundDeck/main/appcast.xml</string>
 	<key>SUPublicEDKey</key>
