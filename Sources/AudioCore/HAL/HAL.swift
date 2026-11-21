@@ -1,3 +1,4 @@
+import AudioToolbox
 import CoreAudio
 import Foundation
 import os
@@ -261,6 +262,119 @@ enum HAL {
 
     static func processIsRunningOutput(_ process: AudioObjectID) -> Bool {
         ((try? read(process, kAudioProcessPropertyIsRunningOutput, initial: UInt32(0), "讀取 process 輸出狀態")) ?? 0) != 0
+    }
+
+    // MARK: - 聲道配置
+
+    /// 每個輸出聲道在左側、右側或中間，給平衡決定要衰減哪些聲道用。
+    ///
+    /// 1、2 聲道直接視為單聲道、左右（有些 HDMI 裝置回報的立體聲配置是「左、未使用」，不可信）。
+    /// 多聲道時，只有每個聲道都有明確的位置標籤才採用裝置回報的配置（例如 5.1 的 L R C LFE Ls Rs）；
+    /// 否則，6 或 8 聲道且偏好的立體聲是 1、2 時視為標準的 5.1／7.1 排列，
+    /// 其他情況只有偏好的立體聲那兩個聲道算左右。
+    static func channelSides(_ device: AudioObjectID, count: Int) -> [ChannelSide] {
+        guard count > 0 else { return [] }
+        if count == 1 { return [.center] }
+        if count == 2 { return [.left, .right] }
+
+        if let labels = preferredChannelLabels(device), labels.count >= count {
+            let used = labels.prefix(count)
+            if used.allSatisfy(isPositional) {
+                return used.map(side(for:))
+            }
+        }
+
+        let preferred = preferredStereoChannels(device)
+        if preferred.left == 1, preferred.right == 2, count == 6 || count == 8 {
+            let surround: [ChannelSide] = [.left, .right, .center, .center, .left, .right, .left, .right]
+            return Array(surround.prefix(count))
+        }
+        var sides = [ChannelSide](repeating: .center, count: count)
+        if preferred.left - 1 < count { sides[preferred.left - 1] = .left }
+        if preferred.right - 1 < count { sides[preferred.right - 1] = .right }
+        return sides
+    }
+
+    /// 標籤有沒有說明聲道的實際位置。「未使用」「未知」或只是「第 N 個獨立聲道」都不算。
+    private static func isPositional(_ label: AudioChannelLabel) -> Bool {
+        label != kAudioChannelLabel_Unused
+            && label != kAudioChannelLabel_Unknown
+            && label != kAudioChannelLabel_UseCoordinates
+            && !(label >= kAudioChannelLabel_Discrete && label <= kAudioChannelLabel_Discrete_65535)
+            && label != kAudioChannelLabel_Mono
+    }
+
+    private static func side(for label: AudioChannelLabel) -> ChannelSide {
+        switch label {
+        case kAudioChannelLabel_Left, kAudioChannelLabel_LeftSurround, kAudioChannelLabel_LeftCenter,
+             kAudioChannelLabel_LeftSurroundDirect, kAudioChannelLabel_RearSurroundLeft, kAudioChannelLabel_LeftWide,
+             kAudioChannelLabel_VerticalHeightLeft, kAudioChannelLabel_TopBackLeft, kAudioChannelLabel_LeftTotal,
+             kAudioChannelLabel_HeadphonesLeft:
+            return .left
+        case kAudioChannelLabel_Right, kAudioChannelLabel_RightSurround, kAudioChannelLabel_RightCenter,
+             kAudioChannelLabel_RightSurroundDirect, kAudioChannelLabel_RearSurroundRight, kAudioChannelLabel_RightWide,
+             kAudioChannelLabel_VerticalHeightRight, kAudioChannelLabel_TopBackRight, kAudioChannelLabel_RightTotal,
+             kAudioChannelLabel_HeadphonesRight:
+            return .right
+        default:
+            return .center
+        }
+    }
+
+    /// 裝置偏好的輸出聲道配置，轉成每個聲道的標籤。讀不到時回傳 nil。
+    private static func preferredChannelLabels(_ device: AudioObjectID) -> [AudioChannelLabel]? {
+        var addr = address(kAudioDevicePropertyPreferredChannelLayout, scope: kAudioObjectPropertyScopeOutput)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(device, &addr, 0, nil, &size) == noErr,
+              size >= UInt32(MemoryLayout<AudioChannelLayout>.size)
+        else { return nil }
+        let raw = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: MemoryLayout<AudioChannelLayout>.alignment)
+        defer { raw.deallocate() }
+        guard AudioObjectGetPropertyData(device, &addr, 0, nil, &size, raw) == noErr else { return nil }
+        return labels(of: raw.assumingMemoryBound(to: AudioChannelLayout.self))
+    }
+
+    /// 把聲道配置展開成每個聲道的標籤。配置可能是直接列出每個聲道，也可能只給一個代碼（例如「5.1」），
+    /// 後者要請系統展開。
+    static func labels(of layout: UnsafePointer<AudioChannelLayout>) -> [AudioChannelLabel]? {
+        let tag = layout.pointee.mChannelLayoutTag
+        if tag == kAudioChannelLayoutTag_UseChannelDescriptions {
+            let count = Int(layout.pointee.mNumberChannelDescriptions)
+            guard count > 0 else { return nil }
+            return withUnsafePointer(to: layout.pointee.mChannelDescriptions) { first in
+                let descriptions = UnsafeRawPointer(first).assumingMemoryBound(to: AudioChannelDescription.self)
+                return (0..<count).map { descriptions[$0].mChannelLabel }
+            }
+        }
+
+        // 指標只能在 withUnsafePointer 的範圍內使用，所以展開的動作整個放在裡面做。
+        if tag == kAudioChannelLayoutTag_UseChannelBitmap {
+            var bitmap = layout.pointee.mChannelBitmap
+            return withUnsafePointer(to: &bitmap) {
+                expandLayout(kAudioFormatProperty_ChannelLayoutForBitmap, $0, UInt32(MemoryLayout<AudioChannelBitmap>.size))
+            }
+        }
+        var tagValue = tag
+        return withUnsafePointer(to: &tagValue) {
+            expandLayout(kAudioFormatProperty_ChannelLayoutForTag, $0, UInt32(MemoryLayout<AudioChannelLayoutTag>.size))
+        }
+    }
+
+    private static func expandLayout(
+        _ property: AudioFormatPropertyID, _ specifier: UnsafeRawPointer, _ specifierSize: UInt32
+    ) -> [AudioChannelLabel]? {
+        var expandedSize: UInt32 = 0
+        guard AudioFormatGetPropertyInfo(property, specifierSize, specifier, &expandedSize) == noErr,
+              expandedSize >= UInt32(MemoryLayout<AudioChannelLayout>.size)
+        else { return nil }
+        let expanded = UnsafeMutableRawPointer.allocate(
+            byteCount: Int(expandedSize), alignment: MemoryLayout<AudioChannelLayout>.alignment
+        )
+        defer { expanded.deallocate() }
+        guard AudioFormatGetProperty(property, specifierSize, specifier, &expandedSize, expanded) == noErr else { return nil }
+        let expandedLayout = expanded.assumingMemoryBound(to: AudioChannelLayout.self)
+        guard expandedLayout.pointee.mChannelLayoutTag == kAudioChannelLayoutTag_UseChannelDescriptions else { return nil }
+        return labels(of: expandedLayout)
     }
 
     /// 把 PID 轉成 Core Audio 的 process 物件。該 process 尚未使用音訊時回傳 nil。

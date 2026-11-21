@@ -3,13 +3,25 @@ import os
 
 /// 即時執行緒上的訊號處理：前級 → 參數式 EQ → Limiter → 音量與左右平衡。
 ///
+/// 支援 1 到 `maxChannels` 個聲道（立體聲、5.1、7.1…）。每個聲道各自通過同一組 EQ；
+/// Limiter 同時看所有聲道、對所有聲道套用同一個增益，空間感才不會因為某個聲道被壓而偏移；
+/// 平衡依每個聲道在左側、右側或中間（`ChannelSide`）決定要不要衰減。
+///
 /// 這個 struct 放在手動配置的記憶體裡，內部只有純值與指標，`process` 不配置記憶體、不阻塞。
 /// UI 執行緒透過 `update` / `setVolume` 送入新參數：兩邊用一把 `os_unfair_lock` 交接，
 /// 即時執行緒只用 trylock，搶不到就沿用舊參數、下個緩衝區再試，所以絕不會被 UI 卡住。
 struct DSPKernel {
     static let maxBands = EQSettings.maxBands
+    static let maxChannels = 16
     private static let coefficientsPerBand = 5
-    private static let stateValuesPerBand = 4 // 左聲道 z1、z2，右聲道 z1、z2
+    private static let stateValuesPerChannel = 2 // 每個頻段、每個聲道各有 z1、z2
+
+    /// 實際處理的聲道數，建立後不變。
+    let channelCount: Int
+    /// 每個聲道在左側（−1）、右側（1）或中間（0）。
+    private let sides: UnsafeMutablePointer<Int8>
+    /// 一個 frame 裡各聲道的值，處理時暫存用。
+    private let frameValues: UnsafeMutablePointer<Double>
 
     /// Limiter 的門檻：−1 dBFS。
     static let limiterThreshold: Double = 0.891_250_938
@@ -48,8 +60,8 @@ struct DSPKernel {
 
     /// 預看長度 K（samples）。訊號延遲 K，增益用 K 個 sample 線性下降到位。
     let lookahead: Int
-    private let delayL: UnsafeMutablePointer<Double>
-    private let delayR: UnsafeMutablePointer<Double>
+    /// 每個聲道一條延遲線，長度 maxLookahead：第 c 個聲道從 `delay[c × maxLookahead]` 開始。
+    private let delay: UnsafeMutablePointer<Double>
     private let required: UnsafeMutablePointer<Double> // 最近 2K 個 sample 各自需要的增益
     private let averaged: UnsafeMutablePointer<Double> // 最近 K 個區間最小值
     private var delayIndex = 0
@@ -60,8 +72,25 @@ struct DSPKernel {
     private var limiterGain: Double = 1
     private let releaseCoefficient: Double
 
-    init(sampleRate: Double, initialVolume: Double, initialBalance: Double = 0) {
+    /// - Parameters:
+    ///   - channelCount: 聲道數，1…`maxChannels`。
+    ///   - channelSides: 每個聲道的位置；省略時，2 聲道視為左、右，其他視為中間（平衡不作用）。
+    init(
+        sampleRate: Double, channelCount: Int = 2, channelSides: [ChannelSide]? = nil,
+        initialVolume: Double, initialBalance: Double = 0
+    ) {
         let coefficientCount = Self.maxBands * Self.coefficientsPerBand
+        let channels = min(max(channelCount, 1), Self.maxChannels)
+        self.channelCount = channels
+
+        sides = .allocate(capacity: Self.maxChannels)
+        sides.initialize(repeating: 0, count: Self.maxChannels)
+        let resolvedSides = channelSides ?? (channels == 2 ? [.left, .right] : [])
+        for (index, side) in resolvedSides.prefix(channels).enumerated() {
+            sides[index] = side.rawValue
+        }
+        frameValues = .allocate(capacity: Self.maxChannels)
+        frameValues.initialize(repeating: 0, count: Self.maxChannels)
 
         lock = .allocate(capacity: 1)
         lock.initialize(to: os_unfair_lock())
@@ -77,18 +106,17 @@ struct DSPKernel {
         }
         step.initialize(repeating: 0, count: coefficientCount)
 
-        z = .allocate(capacity: Self.maxBands * Self.stateValuesPerBand)
-        z.initialize(repeating: 0, count: Self.maxBands * Self.stateValuesPerBand)
+        let stateCount = Self.maxBands * Self.maxChannels * Self.stateValuesPerChannel
+        z = .allocate(capacity: stateCount)
+        z.initialize(repeating: 0, count: stateCount)
 
         let safeRate = sampleRate > 0 ? sampleRate : 48_000
         // 約 0.67 ms；取樣率越高 sample 數越多，時間長度大致不變。
         lookahead = min(max(Int((safeRate / 1500).rounded()), 16), Self.maxLookahead)
-        delayL = .allocate(capacity: Self.maxLookahead)
-        delayR = .allocate(capacity: Self.maxLookahead)
+        delay = .allocate(capacity: Self.maxLookahead * Self.maxChannels)
         required = .allocate(capacity: Self.maxLookahead * 2)
         averaged = .allocate(capacity: Self.maxLookahead)
-        delayL.initialize(repeating: 0, count: Self.maxLookahead)
-        delayR.initialize(repeating: 0, count: Self.maxLookahead)
+        delay.initialize(repeating: 0, count: Self.maxLookahead * Self.maxChannels)
         required.initialize(repeating: 1, count: Self.maxLookahead * 2)
         averaged.initialize(repeating: 1, count: Self.maxLookahead)
         averagedSum = Double(lookahead)
@@ -114,8 +142,9 @@ struct DSPKernel {
         target.deallocate()
         step.deallocate()
         z.deallocate()
-        delayL.deallocate()
-        delayR.deallocate()
+        sides.deallocate()
+        frameValues.deallocate()
+        delay.deallocate()
         required.deallocate()
         averaged.deallocate()
     }
@@ -144,7 +173,6 @@ struct DSPKernel {
         os_unfair_lock_unlock(kernel.pointee.lock)
     }
 
-    /// 設定最末端的音量（線性，0…1）。
     /// 設定左右平衡：−1 只剩左聲道、0 置中、1 只剩右聲道。偏向一邊時只降低另一邊，偏向的那邊維持原音量。
     static func setBalance(_ kernel: UnsafeMutablePointer<DSPKernel>, _ balance: Double) {
         os_unfair_lock_lock(kernel.pointee.lock)
@@ -152,6 +180,7 @@ struct DSPKernel {
         os_unfair_lock_unlock(kernel.pointee.lock)
     }
 
+    /// 設定最末端的音量（線性，0…1）。
     static func setVolume(_ kernel: UnsafeMutablePointer<DSPKernel>, _ volume: Double) {
         os_unfair_lock_lock(kernel.pointee.lock)
         kernel.pointee.pendingVolume = volume.clamped(to: 0...1)
@@ -160,10 +189,30 @@ struct DSPKernel {
 
     // MARK: - 即時執行緒
 
-    /// 就地處理一段立體聲。`left` / `right` 指向各自聲道的第一個 sample，stride 是相鄰 sample 的間隔。
+    /// 就地處理一段立體聲。給只有兩個聲道的呼叫端（與測試）使用。
     mutating func process(
         left: UnsafeMutablePointer<Float32>, leftStride: Int,
         right: UnsafeMutablePointer<Float32>, rightStride: Int,
+        frames: Int
+    ) {
+        var pointers = (left, right)
+        var strides = (leftStride, rightStride)
+        withUnsafeMutableBytes(of: &pointers) { pointerBytes in
+            withUnsafeMutableBytes(of: &strides) { strideBytes in
+                process(
+                    channels: pointerBytes.baseAddress!.assumingMemoryBound(to: UnsafeMutablePointer<Float32>.self),
+                    strides: strideBytes.baseAddress!.assumingMemoryBound(to: Int.self),
+                    frames: frames
+                )
+            }
+        }
+    }
+
+    /// 就地處理 `channelCount` 個聲道。`channels[c]` 指向第 c 個聲道的第一個 sample，
+    /// `strides[c]` 是同一聲道相鄰兩個 sample 的間隔（交錯格式時等於該緩衝區的聲道數）。
+    mutating func process(
+        channels: UnsafePointer<UnsafeMutablePointer<Float32>>,
+        strides: UnsafePointer<Int>,
         frames: Int
     ) {
         guard frames > 0 else { return }
@@ -197,12 +246,17 @@ struct DSPKernel {
         let windowLength = k * 2
         let inverseK = 1 / Double(k)
 
+        let channelCount = self.channelCount
+        let channelStride = Self.maxChannels * Self.stateValuesPerChannel
+        let delayLength = Self.maxLookahead
+
         for frame in 0..<frames {
             preamp += preampStep
-            var l = Double(left[frame * leftStride]) * preamp
-            var r = Double(right[frame * rightStride]) * preamp
+            for channel in 0..<channelCount {
+                frameValues[channel] = Double(channels[channel][frame * strides[channel]]) * preamp
+            }
 
-            // 2. EQ：串接的 biquad，transposed direct form II。
+            // 2. EQ：串接的 biquad，transposed direct form II。每個聲道用同一組係數、各自的狀態。
             for band in 0..<bandCount {
                 let c = band * perBand
                 if ramping {
@@ -214,23 +268,25 @@ struct DSPKernel {
                 }
                 let b0 = current[c], b1 = current[c + 1], b2 = current[c + 2]
                 let a1 = current[c + 3], a2 = current[c + 4]
-                let s = band * Self.stateValuesPerBand
+                let bandBase = band * channelStride
 
-                let yl = b0 * l + z[s]
-                z[s] = b1 * l - a1 * yl + z[s + 1]
-                z[s + 1] = b2 * l - a2 * yl
-                l = yl
-
-                let yr = b0 * r + z[s + 2]
-                z[s + 2] = b1 * r - a1 * yr + z[s + 3]
-                z[s + 3] = b2 * r - a2 * yr
-                r = yr
+                for channel in 0..<channelCount {
+                    let s = bandBase + channel * Self.stateValuesPerChannel
+                    let x = frameValues[channel]
+                    let y = b0 * x + z[s]
+                    z[s] = b1 * x - a1 * y + z[s + 1]
+                    z[s + 1] = b2 * x - a2 * y
+                    frameValues[channel] = y
+                }
             }
 
-            // 3. Limiter（預看式峰值限幅，左右聲道連動）。
+            // 3. Limiter（預看式峰值限幅，所有聲道連動）。
             //    每個 sample 算出「不超過門檻所需的增益」，取最近 2K 個的最小值，再對 K 個做移動平均。
             //    訊號延遲 K 個 sample，所以增益會在峰值抵達之前就線性降到位，保證輸出不超過門檻。
-            let peak = max(abs(l), abs(r))
+            var peak: Double = 0
+            for channel in 0..<channelCount {
+                peak = max(peak, abs(frameValues[channel]))
+            }
             let need = peak > threshold ? threshold / peak : 1
             required[requiredIndex] = need
             requiredIndex += 1
@@ -257,20 +313,27 @@ struct DSPKernel {
             let attack = min(averagedSum * inverseK, 1)
             limiterGain = min(attack, limiterGain + (1 - limiterGain) * releaseCoefficient)
 
-            let delayedL = delayL[delayIndex], delayedR = delayR[delayIndex]
-            delayL[delayIndex] = l
-            delayR[delayIndex] = r
-            delayIndex += 1
-            if delayIndex == k { delayIndex = 0 }
-
-            // 4. 音量，以及理論上不會觸發的最後一道上限。
+            // 4. 音量與平衡，以及理論上不會觸發的最後一道上限。
             volume += volumeStep
             balance += balanceStep
             let gain = limiterGain * volume
-            let leftGain = gain * min(1, 1 - balance)
-            let rightGain = gain * min(1, 1 + balance)
-            left[frame * leftStride] = Float32((delayedL * leftGain).clamped(to: -1...1))
-            right[frame * rightStride] = Float32((delayedR * rightGain).clamped(to: -1...1))
+            let leftSideGain = gain * min(1, 1 - balance)
+            let rightSideGain = gain * min(1, 1 + balance)
+
+            for channel in 0..<channelCount {
+                let slot = channel * delayLength + delayIndex
+                let delayed = delay[slot]
+                delay[slot] = frameValues[channel]
+                let channelGain: Double
+                switch sides[channel] {
+                case -1: channelGain = leftSideGain
+                case 1: channelGain = rightSideGain
+                default: channelGain = gain
+                }
+                channels[channel][frame * strides[channel]] = Float32((delayed * channelGain).clamped(to: -1...1))
+            }
+            delayIndex += 1
+            if delayIndex == k { delayIndex = 0 }
         }
 
         preamp = preampTarget
@@ -282,7 +345,8 @@ struct DSPKernel {
             memcpy(current, target, Self.maxBands * perBand * MemoryLayout<Double>.size)
             // 被移除的頻段：清掉殘留狀態，下次再啟用時從乾淨的狀態開始。
             if targetBandCount < bandCount {
-                for index in (targetBandCount * Self.stateValuesPerBand)..<(bandCount * Self.stateValuesPerBand) {
+                let channelStride = Self.maxChannels * Self.stateValuesPerChannel
+                for index in (targetBandCount * channelStride)..<(bandCount * channelStride) {
                     z[index] = 0
                 }
             }
@@ -294,4 +358,11 @@ struct DSPKernel {
             averagedSum = Double(k)
         }
     }
+}
+
+/// 聲道在聆聽者的哪一側，決定平衡要不要衰減它。
+enum ChannelSide: Int8, Sendable {
+    case left = -1
+    case center = 0 // 中置、重低音、正上方等：平衡不影響
+    case right = 1
 }

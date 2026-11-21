@@ -1,3 +1,4 @@
+import CoreAudio
 @testable import AudioCore
 import XCTest
 
@@ -355,5 +356,175 @@ final class EQTextFormatTests: XCTestCase {
         let text = EQTextFormat.format(.flat, name: "Mine", language: .english)
         XCTAssertTrue(text.hasPrefix("# Name: Mine"))
         XCTAssertEqual(try EQTextFormat.parse(text).name, "Mine")
+    }
+}
+
+final class MultichannelTests: XCTestCase {
+    private let sampleRate = 48_000.0
+    /// 標準 5.1 排列：L R C LFE Ls Rs。
+    private let surroundSides: [ChannelSide] = [.left, .right, .center, .center, .left, .right]
+
+    private func makeKernel(channels: Int, sides: [ChannelSide]?) -> UnsafeMutablePointer<DSPKernel> {
+        let kernel = UnsafeMutablePointer<DSPKernel>.allocate(capacity: 1)
+        kernel.initialize(to: DSPKernel(sampleRate: sampleRate, channelCount: channels, channelSides: sides, initialVolume: 1))
+        addTeardownBlock {
+            kernel.pointee.deallocate()
+            kernel.deallocate()
+        }
+        return kernel
+    }
+
+    /// 處理一段交錯格式（L R C LFE Ls Rs L R …）的多聲道訊號。
+    private func process(_ kernel: UnsafeMutablePointer<DSPKernel>, interleaved: inout [Float], channels: Int) {
+        let frames = interleaved.count / channels
+        interleaved.withUnsafeMutableBufferPointer { buffer in
+            var pointers = (0..<channels).map { buffer.baseAddress! + $0 }
+            var strides = [Int](repeating: channels, count: channels)
+            pointers.withUnsafeMutableBufferPointer { p in
+                strides.withUnsafeMutableBufferPointer { s in
+                    var offset = 0
+                    while offset < frames {
+                        let count = min(256, frames - offset)
+                        var shifted = p.map { $0 + offset * channels }
+                        shifted.withUnsafeMutableBufferPointer { q in
+                            kernel.pointee.process(channels: q.baseAddress!, strides: s.baseAddress!, frames: count)
+                        }
+                        offset += count
+                    }
+                }
+            }
+        }
+    }
+
+    func testSurroundChannelsPassThroughUnchanged() {
+        let kernel = makeKernel(channels: 6, sides: surroundSides)
+        let frames = 2048
+        var signal = [Float](repeating: 0, count: frames * 6)
+        for frame in 0..<frames {
+            for channel in 0..<6 {
+                signal[frame * 6 + channel] = Float(channel + 1) * 0.1 // 每個聲道不同的定值
+            }
+        }
+        process(kernel, interleaved: &signal, channels: 6)
+        let last = Array(signal.suffix(6))
+        for channel in 0..<6 {
+            XCTAssertEqual(last[channel], Float(channel + 1) * 0.1, accuracy: 1e-5, "第 \(channel + 1) 聲道")
+        }
+    }
+
+    func testBalanceOnlyAffectsSideChannels() {
+        let kernel = makeKernel(channels: 6, sides: surroundSides)
+        DSPKernel.setBalance(kernel, 1) // 全右：左側（L、Ls）靜音，中置與重低音不受影響
+        var signal = [Float](repeating: 0.3, count: 2048 * 6)
+        process(kernel, interleaved: &signal, channels: 6)
+        let last = Array(signal.suffix(6))
+        XCTAssertEqual(last[0], 0, accuracy: 1e-6)      // L
+        XCTAssertEqual(last[1], 0.3, accuracy: 1e-5)    // R
+        XCTAssertEqual(last[2], 0.3, accuracy: 1e-5)    // C
+        XCTAssertEqual(last[3], 0.3, accuracy: 1e-5)    // LFE
+        XCTAssertEqual(last[4], 0, accuracy: 1e-6)      // Ls
+        XCTAssertEqual(last[5], 0.3, accuracy: 1e-5)    // Rs
+    }
+
+    func testLimiterIsLinkedAcrossAllChannels() {
+        let kernel = makeKernel(channels: 6, sides: surroundSides)
+        let frames = 9600
+        var signal = [Float](repeating: 0, count: frames * 6)
+        for frame in 0..<frames {
+            signal[frame * 6 + 0] = 0.4  // L 正常音量
+            signal[frame * 6 + 2] = 2.0  // C 遠超過 0 dBFS
+        }
+        process(kernel, interleaved: &signal, channels: 6)
+        let peak = signal.map(abs).max()!
+        XCTAssertLessThanOrEqual(Double(peak), DSPKernel.limiterThreshold + 1e-6)
+        // 中置被壓到門檻時，左聲道也被等比例壓低，兩者比例不變。
+        let last = Array(signal.suffix(6))
+        XCTAssertEqual(Double(last[2] / last[0]), 5, accuracy: 0.01)
+    }
+
+    func testEQAppliesToEveryChannel() {
+        let kernel = makeKernel(channels: 6, sides: surroundSides)
+        let band = EQBand(kind: .peak, frequency: 1000, gainDB: 6, q: 1)
+        DSPKernel.update(kernel, filters: [Biquad(band: band, sampleRate: sampleRate)], preamp: 1)
+        let frames = 9600
+        var signal = [Float](repeating: 0, count: frames * 6)
+        for frame in 0..<frames {
+            let value = Float(0.1 * sin(2 * .pi * 1000 * Double(frame) / sampleRate))
+            for channel in 0..<6 { signal[frame * 6 + channel] = value }
+        }
+        process(kernel, interleaved: &signal, channels: 6)
+        for channel in 0..<6 {
+            let tail = stride(from: (frames - 2400) * 6 + channel, to: frames * 6, by: 6).map { abs(signal[$0]) }.max()!
+            XCTAssertEqual(Double(tail), 0.1 * pow(10, 6.0 / 20), accuracy: 0.002, "第 \(channel + 1) 聲道")
+        }
+    }
+
+    func testMonoDeviceHasNoBalance() {
+        let kernel = makeKernel(channels: 1, sides: [.center])
+        DSPKernel.setBalance(kernel, -1)
+        var signal = [Float](repeating: 0.25, count: 2048)
+        process(kernel, interleaved: &signal, channels: 1)
+        XCTAssertEqual(signal.last!, 0.25, accuracy: 1e-5)
+    }
+
+    /// 模擬 5.1 裝置上的 aggregate device：2 個槽位（各是一個 6 聲道的 tap 串流）混到 1 個 6 聲道的輸出串流。
+    func testRendererMixesSlotsChannelByChannelOnSurroundDevice() {
+        let channels = 6, slots = 2, frames = 1024
+        var slotChannels: [ChannelRef] = []
+        for slot in 0..<slots {
+            for channel in 0..<channels { slotChannels.append(ChannelRef(buffer: slot, channel: channel)) }
+        }
+        let outChannels = (0..<channels).map { ChannelRef(buffer: 0, channel: $0) }
+        let state = UnsafeMutablePointer<RenderState>.allocate(capacity: 1)
+        state.initialize(to: RenderState(
+            slotChannels: slotChannels, outChannels: outChannels, slotGains: [1, 0.5],
+            dsp: DSPKernel(sampleRate: sampleRate, channelCount: channels, channelSides: surroundSides, initialVolume: 1)
+        ))
+        defer {
+            state.pointee.deallocate()
+            state.deinitialize(count: 1)
+            state.deallocate()
+        }
+
+        // 槽位 0：只有中置聲道有聲音（對白）；槽位 1：只有環繞右聲道有聲音。
+        func makeList(buffers: Int, fill: (Int, Int, Int) -> Float) -> (UnsafeMutableAudioBufferListPointer, [UnsafeMutablePointer<Float>]) {
+            let list = AudioBufferList.allocate(maximumBuffers: buffers)
+            var storage: [UnsafeMutablePointer<Float>] = []
+            for index in 0..<buffers {
+                let data = UnsafeMutablePointer<Float>.allocate(capacity: frames * channels)
+                for frame in 0..<frames {
+                    for channel in 0..<channels { data[frame * channels + channel] = fill(index, frame, channel) }
+                }
+                list[index] = AudioBuffer(
+                    mNumberChannels: UInt32(channels),
+                    mDataByteSize: UInt32(frames * channels * MemoryLayout<Float>.size),
+                    mData: data
+                )
+                storage.append(data)
+            }
+            return (list, storage)
+        }
+        let (input, inputStorage) = makeList(buffers: slots) { slot, _, channel in
+            if slot == 0, channel == 2 { return 0.4 }
+            if slot == 1, channel == 5 { return 0.6 }
+            return 0
+        }
+        let (output, outputStorage) = makeList(buffers: 1) { _, _, _ in 0 }
+        defer {
+            (inputStorage + outputStorage).forEach { $0.deallocate() }
+            free(input.unsafeMutablePointer)
+            free(output.unsafeMutablePointer)
+        }
+
+        Renderer.render(state, input: input.unsafePointer, output: output.unsafeMutablePointer)
+
+        let out = outputStorage[0]
+        let lastFrame = (frames - 1) * channels
+        XCTAssertEqual(out[lastFrame + 2], 0.4, accuracy: 1e-5) // 中置照原位置送出，沒有被丟掉
+        XCTAssertEqual(out[lastFrame + 5], 0.3, accuracy: 1e-5) // 環繞右 × 槽位增益 0.5
+        for channel in [0, 1, 3, 4] {
+            XCTAssertEqual(out[lastFrame + channel], 0, accuracy: 1e-6, "第 \(channel + 1) 聲道應該安靜")
+        }
+        XCTAssertFalse(state.pointee.tripped)
     }
 }

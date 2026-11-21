@@ -150,31 +150,29 @@ final class OutputPipeline {
 
             // 輸入端：實體裝置若自己有輸入聲道（例如 USB 耳麥），它們排在前面，
             // 各 tap 的聲道依 tap list 的順序排在最後。一定要取 tap 的聲道，否則會把麥克風送進喇叭。
-            // tap 的聲道配置跟裝置串流相同，所以輸入與輸出都取裝置偏好的立體聲聲道；單聲道則左右用同一個。
-            let preferred = HAL.preferredStereoChannels(outputDevice)
+            // tap 的格式跟裝置串流相同，所以第 c 個 tap 聲道直接對應裝置的第 c 個輸出聲道，不做降混：
+            // 5.1 裝置上，中置、重低音、環繞聲道都照原位置送出。
             let tapOffset = inputTotal - tapChannelTotal
-            var slotLeft: [ChannelRef] = []
-            var slotRight: [ChannelRef] = []
+            let channelCount = min(tapChannels, outputTotal, DSPKernel.maxChannels)
+            var slotChannels: [ChannelRef] = []
             for slot in 0..<slotCount {
-                let base = tapOffset + slot * tapChannels
-                guard let left = ChannelRef.resolve(
-                    globalIndex: base + min(preferred.left - 1, tapChannels - 1), layout: inputLayout
-                ), let right = ChannelRef.resolve(
-                    globalIndex: base + min(preferred.right - 1, tapChannels - 1), layout: inputLayout
-                ) else {
-                    throw CoreAudioError(status: kAudioHardwareBadStreamError, operation: "定位 tap 聲道")
+                for channel in 0..<channelCount {
+                    guard let ref = ChannelRef.resolve(
+                        globalIndex: tapOffset + slot * tapChannels + channel, layout: inputLayout
+                    ) else {
+                        throw CoreAudioError(status: kAudioHardwareBadStreamError, operation: "定位 tap 聲道")
+                    }
+                    slotChannels.append(ref)
                 }
-                slotLeft.append(left)
-                slotRight.append(right)
             }
-
-            let leftIndex = min(preferred.left - 1, outputTotal - 1)
-            let rightIndex = min(preferred.right - 1, outputTotal - 1)
-            guard let outLeft = ChannelRef.resolve(globalIndex: leftIndex, layout: outputLayout),
-                  let outRight = ChannelRef.resolve(globalIndex: rightIndex, layout: outputLayout)
-            else {
-                throw CoreAudioError(status: kAudioHardwareBadStreamError, operation: "定位輸出聲道")
+            var outChannels: [ChannelRef] = []
+            for channel in 0..<channelCount {
+                guard let ref = ChannelRef.resolve(globalIndex: channel, layout: outputLayout) else {
+                    throw CoreAudioError(status: kAudioHardwareBadStreamError, operation: "定位輸出聲道")
+                }
+                outChannels.append(ref)
             }
+            let sides = HAL.channelSides(outputDevice, count: channelCount)
 
             let info = PipelineInfo(
                 deviceName: deviceName,
@@ -186,10 +184,9 @@ final class OutputPipeline {
 
             let state = UnsafeMutablePointer<RenderState>.allocate(capacity: 1)
             state.initialize(to: RenderState(
-                slotLeft: slotLeft, slotRight: slotRight, slotGains: slotGains,
-                outLeft: outLeft, outRight: outRight,
+                slotChannels: slotChannels, outChannels: outChannels, slotGains: slotGains,
                 dsp: DSPKernel(
-                    sampleRate: info.sampleRate,
+                    sampleRate: info.sampleRate, channelCount: channelCount, channelSides: sides,
                     initialVolume: Double(initialGain), initialBalance: Double(initialBalance)
                 )
             ))
@@ -207,7 +204,7 @@ final class OutputPipeline {
                 "管線建立：\(deviceName) \(info.sampleRate) Hz，緩衝 \(info.bufferFrames) frames" // 不翻譯
                 + "（\(String(format: "%.1f", info.bufferMilliseconds)) ms），\(slotCount) 個槽位，" // 不翻譯
                 + "輸入配置 \(inputLayout)（tap 起始聲道 \(tapOffset)），" // 不翻譯
-                + "輸出配置 \(outputLayout)（L=\(leftIndex) R=\(rightIndex)）" // 不翻譯
+                + "輸出配置 \(outputLayout)，處理 \(channelCount) 個聲道 \(sides.map(\.rawValue))" // 不翻譯
             )
         } catch {
             AudioHardwareDestroyAggregateDevice(aggregateID)
