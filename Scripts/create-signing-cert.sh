@@ -16,7 +16,7 @@ NAME="SoundDeck Dev"
 KEYCHAIN="${1:-$HOME/Library/Keychains/login.keychain-db}"
 
 if security find-certificate -c "${NAME}" "$KEYCHAIN" >/dev/null 2>&1; then
-    echo "「${NAME}」已經存在於 $KEYCHAIN，不需要再建立。"
+    echo "「${NAME}」已經存在於 ${KEYCHAIN}，不需要再建立。"
     exit 0
 fi
 
