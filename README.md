@@ -18,6 +18,7 @@
 | **參數式等化器** | 最多 16 個頻段，六種濾波器（鐘形、低頻擱架、高頻擱架、高通、低通、陷波），可拖曳的頻率響應曲線 |
 | **每個裝置各自的 EQ** | 耳機、喇叭、soundbar 各記一組，切換輸出時自動套用 |
 | **EQ 預設組** | 內建平坦、低音加強、高音加強、人聲清晰、樂團、小音量補償；可儲存、改名、刪除自訂預設組 |
+| **匯入 EQ** | 匯入 [AutoEQ](https://github.com/jaakkopasanen/AutoEq) 的耳機校正檔；或複製範本請 AI 依你常聽的音樂產生參數，把回覆貼回來就能套用 |
 | **App 混音器** | 每個正在發聲的 App 一列，各自調整音量（0–200%）與靜音，並顯示即時電平 |
 | **依 App 指定輸出裝置** | 例如音樂走喇叭、通話走耳機。總開關預設關閉；可一鍵全部還原為系統預設 |
 | **輸出裝置管理** | 一鍵切換系統輸出；HDMI 螢幕等沒有音量控制的裝置也能調音量（自動改用軟體音量） |
@@ -79,6 +80,37 @@ cd SoundDeck
 - **等化器**：切換預設組，或按「編輯…」打開編輯器。
   - 拖曳控制點調整頻率與增益；按住 `Shift` 拖曳可以微調；雙擊控制點把增益歸零。
   - 編輯器上方可以選擇要調哪個輸出裝置的 EQ。
+  - 按編輯器右上角的「**匯入**」可以匯入設定，見下一節。
+
+### 匯入 EQ 設定
+
+匯入視窗接受 Equalizer APO 的參數式 EQ 格式，也就是 AutoEQ `ParametricEQ.txt` 的格式：
+
+```
+# 名稱: 樂團
+Preamp: -3.0 dB
+Filter 1: ON LSC Fc 90 Hz Gain 3.0 dB Q 0.71
+Filter 2: ON PK Fc 250 Hz Gain -1.5 dB Q 1.40
+Filter 3: ON HSC Fc 9000 Hz Gain 2.0 dB Q 0.71
+```
+
+**耳機校正（AutoEQ）**：AutoEQ 依量測資料替數千款耳機算好了「把頻率響應拉平」的 EQ。
+到 [AutoEQ 的 results 資料夾](https://github.com/jaakkopasanen/AutoEq/tree/master/results)找到你的耳機型號，
+下載 `<型號> ParametricEQ.txt`，在匯入視窗按「選擇檔案…」。AutoEQ 提供的本來就是參數式 EQ，
+SoundDeck 會照原始數值套用，不需要轉換成固定頻段。
+
+**請 AI 幫你調**：
+
+1. 在匯入視窗按「**複製給 AI 的範本**」。範本已經寫好 SoundDeck 能接受的格式與數值範圍，
+   也會帶入目前的裝置名稱；如果你已經調過 EQ，也會附上目前的設定讓 AI 在這個基礎上修改。
+2. 貼給 ChatGPT、Claude 等 AI，把括號裡的內容改成你的播放裝置、常聽的音樂和想要的效果。
+3. 把 AI 的**整段回覆**貼回匯入視窗（或按「從剪貼簿貼上」）。SoundDeck 只讀取格式正確的那幾行，其他說明文字會自動略過。
+4. 確認預覽沒問題後，按「套用」或「套用並存為預設組」。
+
+匯入時超出範圍的數值會被調整到範圍內、不支援的濾波器類型會略過，預覽中都會列出。
+檔案裡寫的 Preamp 只供參考，匯入後前級增益一律由自動補償計算。
+
+「複製目前的設定」會把目前的 EQ 轉成同樣的文字格式，可以分享給朋友，對方用同一個視窗匯入。
 
 ## 運作原理
 
@@ -243,11 +275,11 @@ SoundDeck/
 │   │   ├── Processes/             # 音訊 process 列舉與 App 歸屬判定
 │   │   ├── Tap/                   # Process Tap
 │   │   ├── Pipeline/              # OutputPipeline：單一輸出裝置的 aggregate device、IOProc、即時處理
-│   │   ├── DSP/                   # Biquad、參數式 EQ、Limiter、EQ 設定與預設組
+│   │   ├── DSP/                   # Biquad、參數式 EQ、Limiter、EQ 設定與預設組、匯入匯出格式
 │   │   ├── Mixer/                 # MixerController：槽位分配、各 App 音量與指定裝置
 │   │   └── Engine/                # AudioEngine：管理多條管線與路由
 │   └── App/                       # SwiftUI：選單列面板、混音器、EQ 編輯器
-├── Tests/AudioCoreTests/          # DSP 與歸屬判定的單元測試
+├── Tests/AudioCoreTests/          # DSP、匯入格式與歸屬判定的單元測試
 ├── Resources/                     # Info.plist、App 圖示
 └── Scripts/                       # 建置、打包、簽章、圖示
 ```
@@ -309,6 +341,7 @@ open build/SoundDeck.app --args --log-stats --route-test <App 的 bundle ID> <�
 | M3 | App 混音器：固定 13 個 tap 槽位、helper process 歸屬判定 |
 | M4 | 依 App 指定輸出裝置、多條管線、每個裝置各自的 EQ |
 | M5 | 自訂預設組、開機自動啟動、介面整理、App 圖示、dmg 打包 |
+| M6 | 匯入 AutoEQ／Equalizer APO 格式、給 AI 的參數範本、匯出目前設定 |
 
 ### 之後可能做的
 
@@ -316,7 +349,6 @@ open build/SoundDeck.app --args --log-stats --route-test <App 的 bundle ID> <�
 - 輸入裝置（麥克風）的選擇與音量
 - 依 App 獨立的 EQ
 - 圖形式 EQ（固定 10 段的簡易介面）
-- 匯入 AutoEQ 耳機校正檔
 - 左右聲道平衡
 
 ## 參考資料

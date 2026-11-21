@@ -203,3 +203,107 @@ final class ProcessAttributionTests: XCTestCase {
         XCTAssertNil(AudioProcessMonitor.outermostEnclosingApp(of: URL(fileURLWithPath: "/Applications/Utilities/Terminal.app")))
     }
 }
+
+final class EQTextFormatTests: XCTestCase {
+    /// AutoEQ 實際輸出的 ParametricEQ.txt 格式。
+    private let autoEQ = """
+    Preamp: -6.4 dB
+    Filter 1: ON LSC Fc 105 Hz Gain 5.6 dB Q 0.70
+    Filter 2: ON PK Fc 46 Hz Gain -1.2 dB Q 1.13
+    Filter 3: ON PK Fc 1335 Hz Gain -1.7 dB Q 1.37
+    Filter 4: ON PK Fc 3291 Hz Gain 2.9 dB Q 2.52
+    Filter 5: ON PK Fc 6082 Hz Gain -3.9 dB Q 3.59
+    Filter 6: ON PK Fc 9718 Hz Gain 1.9 dB Q 1.88
+    Filter 7: ON HSC Fc 10000 Hz Gain -2.6 dB Q 0.70
+    """
+
+    func testParsesAutoEQFile() throws {
+        let parsed = try EQTextFormat.parse(autoEQ)
+        XCTAssertEqual(parsed.preampDB, -6.4)
+        XCTAssertNil(parsed.name)
+        XCTAssertEqual(parsed.bands.count, 7)
+        XCTAssertEqual(parsed.warnings, [])
+
+        let first = parsed.bands[0]
+        XCTAssertEqual(first.kind, .lowShelf)
+        XCTAssertEqual(first.frequency, 105)
+        XCTAssertEqual(first.gainDB, 5.6)
+        XCTAssertEqual(first.q, 0.70)
+        XCTAssertEqual(parsed.bands[3].kind, .peak)
+        XCTAssertEqual(parsed.bands[6].kind, .highShelf)
+    }
+
+    func testParsesWholeAIReplyWithSurroundingText() throws {
+        let reply = """
+        好的！以下是為你設計的參數：
+
+        ```
+        # 名稱：女聲搖滾
+        Preamp: −3.5 dB
+        Filter 1: ON HP Fc 35 Hz Gain 0 dB Q 0.71
+        Filter 2: ON PK Fc 90 Hz Gain 3 dB Q 1
+        Filter 3: OFF PK Fc 500 Hz Gain 1.5 dB Q 0.9
+        ```
+
+        - Filter 1 濾掉喇叭發不出來的超低頻
+        """
+        let parsed = try EQTextFormat.parse(reply)
+        XCTAssertEqual(parsed.name, "女聲搖滾")
+        XCTAssertEqual(parsed.preampDB, -3.5)
+        XCTAssertEqual(parsed.bands.map(\.kind), [.highPass, .peak, .peak])
+        XCTAssertEqual(parsed.bands.map(\.isEnabled), [true, true, false])
+        XCTAssertEqual(parsed.bands[1].gainDB, 3)
+    }
+
+    func testClampsOutOfRangeValuesAndReportsThem() throws {
+        let parsed = try EQTextFormat.parse("Filter 1: ON PK Fc 30000 Hz Gain 24 dB Q 40")
+        let band = try XCTUnwrap(parsed.bands.first)
+        XCTAssertEqual(band.frequency, 20_000)
+        XCTAssertEqual(band.gainDB, 18)
+        XCTAssertEqual(band.q, 18)
+        XCTAssertEqual(parsed.warnings.count, 3)
+    }
+
+    func testSkipsUnsupportedTypesAndLimitsBandCount() throws {
+        var text = "Filter 1: ON BP Fc 1000 Hz Gain 0 dB Q 1\n"
+        for index in 2...20 {
+            text += "Filter \(index): ON PK Fc \(index * 100) Hz Gain 1 dB Q 1\n"
+        }
+        let parsed = try EQTextFormat.parse(text)
+        XCTAssertEqual(parsed.bands.count, EQSettings.maxBands)
+        XCTAssertEqual(parsed.warnings.count, 2) // BP 不支援、超過上限
+    }
+
+    func testRejectsTextWithoutFilters() {
+        XCTAssertThrowsError(try EQTextFormat.parse("Preamp: -3 dB\n這裡沒有濾波器")) { error in
+            XCTAssertEqual(error as? EQTextFormat.ParseError, .noFilters)
+        }
+    }
+
+    func testFormatRoundTrips() throws {
+        let settings = EQSettings(bands: [
+            EQBand(kind: .highPass, frequency: 40, q: 0.71),
+            EQBand(kind: .peak, frequency: 450, gainDB: 2, q: 0.9),
+            EQBand(kind: .highShelf, frequency: 9000, gainDB: 2.5, q: 0.71, isEnabled: false),
+        ])
+        let text = EQTextFormat.format(settings, name: "測試")
+        let parsed = try EQTextFormat.parse(text)
+        XCTAssertEqual(parsed.name, "測試")
+        XCTAssertEqual(parsed.bands.count, 3)
+        for (original, roundTripped) in zip(settings.bands, parsed.bands) {
+            XCTAssertEqual(original.kind, roundTripped.kind)
+            XCTAssertEqual(original.frequency, roundTripped.frequency)
+            XCTAssertEqual(original.gainDB, roundTripped.gainDB)
+            XCTAssertEqual(original.q, roundTripped.q)
+            XCTAssertEqual(original.isEnabled, roundTripped.isEnabled)
+        }
+    }
+
+    func testAIPromptExampleIsImportable() throws {
+        let prompt = EQTextFormat.aiPrompt(deviceName: "喇叭", current: nil)
+        let parsed = try EQTextFormat.parse(prompt)
+        XCTAssertEqual(parsed.name, "示範設定")
+        XCTAssertEqual(parsed.bands.count, 4)
+        XCTAssertEqual(parsed.warnings, [])
+    }
+}

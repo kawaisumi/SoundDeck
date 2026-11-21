@@ -8,6 +8,7 @@ struct EQEditorView: View {
     @EnvironmentObject private var devices: DeviceManager
     @EnvironmentObject private var equalizer: EqualizerController
     @State private var selectedBand: EQBand.ID?
+    @State private var isImporting = false
 
     /// 曲線依實際輸出的取樣率計算；還沒有管線時用最常見的 48 kHz。
     private var sampleRate: Double {
@@ -58,11 +59,21 @@ struct EQEditorView: View {
                         .tag(device.uid)
                 }
             }
-            .frame(width: 250)
+            .frame(width: 220)
             .help("每個輸出裝置各自記住一組等化器設定。")
 
             EQPresetMenu(allowsManaging: true)
                 .frame(width: 150)
+
+            Button {
+                isImporting = true
+            } label: {
+                Label("匯入", systemImage: "square.and.arrow.down")
+            }
+            .help("匯入 AutoEQ 耳機校正檔，或請 AI 依你的喜好產生參數。")
+        }
+        .sheet(isPresented: $isImporting) {
+            EQImportView()
         }
     }
 
