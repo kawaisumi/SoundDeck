@@ -100,6 +100,10 @@ struct MenuView: View {
 // MARK: - 頁尾
 
 private struct FooterSection: View {
+    private static let info = Bundle.main.infoDictionary ?? [:]
+    static let versionText = "v" + (info["CFBundleShortVersionString"] as? String ?? "?")
+    static let buildNumber = info["CFBundleVersion"] as? String ?? "?"
+
     @StateObject private var loginItem = LoginItem()
 
     var body: some View {
@@ -113,6 +117,11 @@ private struct FooterSection: View {
                 .font(.callout)
 
                 Spacer()
+
+                Text(Self.versionText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help("建置編號 \(Self.buildNumber)")
 
                 Button("結束") {
                     NSApplication.shared.terminate(nil)

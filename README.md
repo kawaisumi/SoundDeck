@@ -291,6 +291,7 @@ SoundDeck/
 | `./Scripts/bundle.sh [release\|debug]` | 建置並組裝 `build/SoundDeck.app`。release 為 Apple 晶片＋Intel 的 universal 版本 |
 | `./Scripts/install.sh` | 建置、安裝到 `/Applications` 並啟動 |
 | `./Scripts/make-dmg.sh` | 打包成 `build/SoundDeck-<版本>.dmg` |
+| `./Scripts/set-version.sh <版本號>` | 設定版本號，並把建置編號加一 |
 | `./Scripts/create-signing-cert.sh` | 在登入鑰匙圈建立自簽的程式碼簽章憑證 `SoundDeck Dev` |
 | `./Scripts/make-icon.sh` | 由 `make-icon.swift` 重新產生 App 圖示 |
 | `swift test` | 執行單元測試 |
@@ -309,9 +310,14 @@ macOS 的錄音權限綁定程式簽章。沒有憑證時 `bundle.sh` 會用 ad-
 
 ### 發佈新版本
 
-1. 修改 `Resources/Info.plist` 的 `CFBundleShortVersionString` 與 `CFBundleVersion`。
-2. 執行 `./Scripts/make-dmg.sh`，產生 `build/SoundDeck-<版本>.dmg`。
-3. 在 GitHub 建立新的 Release，把 dmg 上傳為附件。
+1. 設定版本號：`./Scripts/set-version.sh 1.1.0`。版本號採「主版本.次版本.修正版本」：
+   修正 bug 加最後一碼（1.0.0 → 1.0.1），新增功能加中間一碼（1.0.1 → 1.1.0）。腳本也會把內部建置編號加一。
+2. commit 這次的版本變更，並加上同名的 tag：`git tag v1.1.0`。
+3. 執行 `./Scripts/make-dmg.sh`，產生 `build/SoundDeck-<版本>.dmg`。
+4. 計算校驗碼：`shasum -a 256 build/SoundDeck-<版本>.dmg`。
+5. 在 GitHub 建立新的 Release，選剛才的 tag，把 dmg 上傳為附件，並把校驗碼貼在說明裡。
+
+目前的版本號顯示在控制面板右下角「結束」按鈕的左邊；滑鼠停在上面會顯示建置編號。
 
 請一直用**同一張憑證**簽章發佈的版本。換了憑證，已安裝的使用者更新後要重新允許錄音權限。
 建議從「鑰匙圈存取」把 `SoundDeck Dev` 匯出成 `.p12` 備份起來（不要放進 repo）。
