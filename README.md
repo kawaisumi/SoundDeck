@@ -1,449 +1,416 @@
 <p align="center">
-  <img src="Resources/AppIcon-preview.png" width="128" alt="Tonefleur 圖示">
+  <img src="Resources/AppIcon-preview.png" width="128" alt="Tonefleur icon">
 </p>
 
 <h1 align="center">Tonefleur</h1>
 
 <p align="center">
-  macOS 選單列音訊工具：系統等化器、依 App 混音、輸出裝置管理。<br>
-  不需要安裝任何音訊驅動程式。<br>
-  <sub>原名 SoundDeck</sub>
+  A macOS menu bar audio tool: system-wide equalizer, per-app mixer, and output device management.<br>
+  No audio driver to install.<br>
+  <sub>English · <a href="README.zh-TW.md">繁體中文</a> · formerly SoundDeck</sub>
 </p>
 
 ---
 
-## 功能
+## Highlights
 
-| 功能 | 說明 |
+- **Driverless system-wide audio processing.** Built on the Core Audio Process Tap API (macOS 14.2+) instead of a virtual audio driver. Nothing to install, and if the app quits or crashes, macOS automatically restores normal playback.
+- **Real-time DSP written from scratch in Swift:** parametric biquad EQ, a linked lookahead peak limiter, a per-channel mixer for 1–16 channels (stereo, 5.1, 7.1), and an FFT spectrum analyzer (vDSP). The render path is allocation-free and lock-free.
+- **Per-app routing.** Each app can play to a different output device, with an independent EQ for each device. Apps move between pipelines without glitches or audio leaking out.
+- **Shipped and maintained:** universal binary (Apple silicon + Intel), signed DMG releases, Sparkle auto-updates with EdDSA signatures, English and Traditional Chinese UI, and 32 unit tests.
+
+## Features
+
+| Feature | Description |
 |---|---|
-| **參數式等化器** | 最多 16 個頻段，六種濾波器（鐘形、低頻擱架、高頻擱架、高通、低通、陷波），可拖曳的頻率響應曲線 |
-| **頻譜分析儀** | 在 EQ 曲線後面即時顯示目前播出的聲音在各頻率的音量，手動微調時能看出該加強或衰減哪裡 |
-| **每個裝置各自的 EQ** | 耳機、喇叭、soundbar 各記一組，切換輸出時自動套用 |
-| **EQ 預設組** | 內建平坦、低音加強、高音加強、人聲清晰、樂團、小音量補償；可儲存、改名、刪除自訂預設組 |
-| **匯入 EQ** | 匯入 [AutoEQ](https://github.com/jaakkopasanen/AutoEq) 的耳機校正檔；或複製範本請 AI 依你常聽的音樂產生參數，把回覆貼回來就能套用 |
-| **App 混音器** | 每個正在發聲的 App 一列，各自調整音量（0–200%）與靜音，並顯示即時電平 |
-| **依 App 指定輸出裝置** | 例如音樂走喇叭、通話走耳機。總開關預設關閉；可一鍵全部還原為系統預設 |
-| **輸出裝置管理** | 一鍵切換系統輸出；HDMI 螢幕等沒有音量控制的裝置也能調音量（自動改用軟體音量） |
-| **左右聲道平衡** | 每個輸出裝置各自記住 |
-| **限幅器** | EQ 加強或 App 音量超過 100% 時，把峰值壓在 −1 dBFS 以下，避免爆音 |
-| **自動更新** | 有新版時提示下載安裝（可關閉） |
-| **其他** | 開機自動啟動、休眠喚醒後自動恢復、音量異常暴衝時自動停用 |
+| **Parametric EQ** | Up to 16 bands, six filter types (peak, low shelf, high shelf, high-pass, low-pass, notch), and a draggable frequency-response curve |
+| **Spectrum analyzer** | Shows live per-frequency levels of what's playing behind the EQ curve, so you can see what to boost or cut |
+| **Per-device EQ** | Headphones, speakers and soundbars each keep their own EQ, applied automatically when you switch outputs |
+| **EQ presets** | Built-in Flat, Bass Boost, Treble Boost, Vocal Clarity, Band and Loudness presets; save, rename and delete your own |
+| **EQ import** | Import [AutoEQ](https://github.com/jaakkopasanen/AutoEq) headphone corrections, or copy a template, ask an AI for settings that suit your music, and paste the reply back |
+| **App mixer** | One row per app that is playing sound, with volume (0–200%), mute and a live level meter |
+| **Per-app output** | For example, music on the speakers and calls on headphones. Off by default; one click resets every app to the system default |
+| **Output devices** | One-click output switching; volume control even for devices without it, like HDMI displays (software volume) |
+| **Balance** | Left/right balance, remembered per output device |
+| **Limiter** | Keeps peaks below −1 dBFS when EQ boosts or app volumes above 100% would clip |
+| **Auto-update** | Notifies you when a new version is available (can be turned off) |
+| **Other** | Launch at login, automatic recovery after sleep/wake, automatic shutdown if output level runs away |
 
-介面有繁體中文與英文，依系統語言自動切換；其他語言的系統會顯示英文。
-也可以在「系統設定 → 一般 → 語言與地區 → 應用程式」單獨指定 Tonefleur 的語言。
+The UI is available in English and Traditional Chinese and follows the system language; other system languages fall back to English. You can also pick Tonefleur's language in **System Settings → General → Language & Region → Applications**.
 
-## 系統需求
+## Requirements
 
-- macOS 15 Sequoia 以上
-- Apple 晶片或 Intel 的 Mac 皆可
+- macOS 15 Sequoia or later
+- Apple silicon or Intel Mac
 
-## 安裝
+## Installation
 
-### 下載安裝
+### Download
 
-1. 到本專案的 [Releases](../../releases) 頁面下載最新的 `Tonefleur-<版本>.dmg`。
-2. 打開 dmg，把 **Tonefleur** 拖到「**應用程式**」資料夾。
-3. 從「應用程式」打開 Tonefleur。第一次會被系統擋下，顯示「Apple 無法驗證……」，這是正常的（原因見下方說明）：
-   1. 按「完成」關掉提示。
-   2. 打開「**系統設定 → 隱私權與安全性**」，捲到最下面，在 Tonefleur 的訊息旁按「**仍要打開**」（Open Anyway），再輸入登入密碼確認。
-   3. 之後就可以正常打開，不會再出現這個提示。
-4. 系統會詢問是否允許 Tonefleur 錄製**系統音訊**，請按「允許」。沒有這個權限就無法處理聲音，
-   原因與 Tonefleur 如何使用它，見下方的[隱私](#隱私)。
-5. 選單列出現 Tonefleur 的圖示（三條垂直推桿）就代表開始運作了。
+1. Download the latest `Tonefleur-<version>.dmg` from [Releases](../../releases).
+2. Open the DMG and drag **Tonefleur** into **Applications**.
+3. Open Tonefleur from Applications. The first time, macOS blocks it with "Apple could not verify…". This is expected (see below):
+   1. Click **Done** to dismiss the alert.
+   2. Open **System Settings → Privacy & Security**, scroll to the bottom and click **Open Anyway** next to the Tonefleur message, then confirm with your login password.
+   3. From then on it opens normally.
+4. When macOS asks whether Tonefleur may record **system audio**, click **Allow**. Tonefleur cannot process sound without it. See [Privacy](#privacy) for why it needs this and how it uses it.
+5. The Tonefleur icon (three vertical sliders) in the menu bar means it is running.
 
-之後有新版本時，Tonefleur 會自動提示，按「安裝更新」即可，不需要再重新下載 dmg。
-也可以在控制面板底部按「檢查更新…」。
+When a new version comes out, Tonefleur will tell you; just click **Install Update**. You can also click **Check for Updates…** at the bottom of the panel.
 
-> **為什麼會被擋？** 這個 App 沒有經過 Apple 公證（需要付費的 Apple Developer 帳號），
-> 所以系統無法確認開發者身分。程式碼都在這個 repo 裡，也可以自己從原始碼建置。
+> **Why is it blocked?** The app is not notarized by Apple (that requires a paid Apple Developer account), so macOS can't verify the developer. All the source code is in this repo, and you can build it yourself.
 >
-> 如果找不到「仍要打開」，也可以在「終端機」執行下面這行解除隔離標記，再打開 App：
+> If you can't find **Open Anyway**, you can remove the quarantine flag in Terminal and then open the app:
 >
 > ```bash
 > xattr -dr com.apple.quarantine /Applications/Tonefleur.app
 > ```
 
-## 隱私
+## Privacy
 
-Tonefleur 需要「螢幕與系統音訊錄製」權限，看起來像是會錄音，所以這裡說清楚它做什麼、不做什麼。
+Tonefleur needs the "Screen & System Audio Recording" permission, which sounds like it records you. Here is exactly what it does and doesn't do.
 
-**為什麼需要這個權限**：等化器和混音器要先拿到各 App 的聲音，才能調整後再播出來。macOS 規定，
-任何要讀取別的 App 聲音的程式都必須取得這類權限，同類的系統等化器工具也都一樣
-（改用虛擬音訊驅動的做法，則是改要麥克風權限）。
+**Why it needs the permission:** to equalize and mix sound, Tonefleur first has to receive each app's audio and then play it back after processing. macOS requires this permission for any program that reads another app's audio; every system-wide EQ tool of this kind needs it (tools built on virtual audio drivers ask for microphone permission instead).
 
-**Tonefleur 不會做的事**
+**What Tonefleur never does**
 
-- 不會把聲音存成檔案。聲音只在記憶體裡即時處理，處理完就直接送到喇叭。
-- 不會把聲音或任何個人資料傳到網路上。
-- 不收集使用統計，也沒有任何分析或廣告套件。
+- It never saves audio to a file. Audio is processed in memory in real time and sent straight to the speakers.
+- It never sends audio or any personal data over the network.
+- It collects no usage statistics and contains no analytics or ad SDKs.
 
-**唯一會連網的功能是自動更新**：每天向 GitHub 下載一次 `appcast.xml` 檢查有沒有新版，
-有新版時再從 GitHub Releases 下載 dmg。不會附帶任何系統資訊（已關閉 Sparkle 的系統資訊回報）。
-在控制面板底部取消「自動檢查更新」後，除非你手動按「檢查更新…」，Tonefleur 完全不會連網。
+**The only network feature is auto-update:** once a day it downloads `appcast.xml` from GitHub to check for a new version, and downloads the DMG from GitHub Releases when there is one. No system information is sent (Sparkle's system profiling is turned off). If you turn off **Check for updates automatically** at the bottom of the panel, Tonefleur never connects to the network unless you click **Check for Updates…**.
 
-**怎麼自己確認**
+**How to verify this yourself**
 
-- 程式碼全部公開。和網路有關的只有 [`Sources/App/Updater.swift`](Sources/App/Updater.swift) 裡呼叫 Sparkle 的部分；
-  其餘程式碼沒有任何連網或寫入音訊檔的程式。
-- 可以用 [LuLu](https://objective-see.org/products/lulu.html)、Little Snitch 這類防火牆觀察：
-  Tonefleur 只會連到 `raw.githubusercontent.com`（檢查更新）與 `github.com`（下載更新）。
-- 可以從原始碼自己建置，或比對 Release 附上的 SHA-256 校驗碼，確認下載的檔案沒有被改過。
-- 權限隨時可以在「系統設定 → 隱私權與安全性 → 螢幕與系統音訊錄製」關閉。
-  關閉後 Tonefleur 收不到任何聲音，聲音會直接照原本的方式播放。
+- All the code is public. The only networking code is the Sparkle call in [`Sources/App/Updater.swift`](Sources/App/Updater.swift); nothing else opens a connection or writes audio files.
+- Watch it with a firewall such as [LuLu](https://objective-see.org/products/lulu.html) or Little Snitch: Tonefleur only connects to `raw.githubusercontent.com` (update check) and `github.com` (update download).
+- Build it from source, or compare the SHA-256 checksum attached to each release.
+- You can revoke the permission at any time in **System Settings → Privacy & Security → Screen & System Audio Recording**. Tonefleur then receives no audio, and sound plays the way it normally would.
 
-### 從原始碼建置
+### Building from source
 
-需要 macOS 15 以上與 Xcode（只有 Command Line Tools 也能建置，但只會產生本機架構的版本）。
+Requires macOS 15 or later and Xcode (Command Line Tools alone also work, but only build for the current architecture).
 
 ```bash
-git clone <這個 repo 的網址>
+git clone https://github.com/kawaisumi/Tonefleur.git
 cd Tonefleur
-./Scripts/install.sh        # 建置、安裝到「應用程式」並啟動
+./Scripts/install.sh        # build, install to /Applications and launch
 ```
 
-建議先建立一張固定的簽章憑證，否則**每次重新建置後系統都會再問一次錄音權限**（見[開發](#開發)）。
+Create a stable signing certificate first, or **macOS will ask for the recording permission again after every rebuild** (see [Development](#development)).
 
-## 使用方式
+## Usage
 
-點選單列的 Tonefleur 圖示打開控制面板：
+Click the Tonefleur icon in the menu bar to open the panel:
 
-- **右上角開關**：整個 Tonefleur 的總開關。關閉後聲音直接輸出，不經過任何處理。
-- **主音量**：目前輸出裝置的音量。裝置本身沒有音量控制時（例如 HDMI 螢幕）會自動改用軟體音量。
-- **平衡**：主音量下方的 L／R 滑桿，按右邊的文字回到置中。
-- **輸出裝置**：點一下切換系統輸出。
-- **混音器**：各 App 的音量、靜音與電平。
-  - 打開「依 App 指定裝置」後，每一列多一個喇叭圖示，可以把該 App 指定到其他裝置。
-  - 已指定的裝置拔掉時，該 App 暫時改走系統預設，裝置接回後自動搬回。
-  - 「系統音效與其他」收的是通知音、系統音效等無法歸屬到某個 App 的聲音。
-- **等化器**：切換預設組，或按「編輯…」打開編輯器。
-  - 拖曳控制點調整頻率與增益；按住 `Shift` 拖曳可以微調；雙擊控制點把增益歸零。
-  - 編輯器上方可以選擇要調哪個輸出裝置的 EQ。
-  - 曲線後面的灰色區域是頻譜：目前正在播的聲音在各頻率有多大聲。播一首常聽的歌，
-    哪裡太突出就在那裡衰減，哪裡不夠就加強。只有正在編輯的裝置正在播放時才會出現，可以用「顯示頻譜」關掉。
-  - 按編輯器右上角的「**匯入**」可以匯入設定，見下一節。
+- **Top-right switch:** master on/off. When off, audio goes straight to the output with no processing.
+- **Volume:** volume of the current output device. Devices without hardware volume (such as HDMI displays) automatically use software volume.
+- **Balance:** the L/R slider below the volume; click the value on the right to re-center.
+- **Output Device:** click to switch the system output.
+- **Mixer:** volume, mute and level per app.
+  - With **Per-app output** on, each row gets a speaker icon for sending that app to another device.
+  - If an assigned device is unplugged, the app falls back to the system default and moves back when the device returns.
+  - **System sounds & others** collects notification sounds, system sounds and anything that can't be attributed to a specific app.
+- **Equalizer:** pick a preset, or click **Edit…** to open the editor.
+  - Drag a point to change frequency and gain; hold `Shift` for fine adjustment; double-click a point to reset its gain to zero.
+  - Choose which output device's EQ to edit at the top of the editor.
+  - The gray area behind the curve is the spectrum: how loud each frequency is in what's playing right now. Play a song you know well, cut where it's too prominent and boost where it's lacking. It only appears while the device being edited is playing, and can be hidden with **Show spectrum**.
+  - Click **Import** at the top right of the editor to import settings (see below).
 
-### 匯入 EQ 設定
+### Importing EQ settings
 
-匯入視窗接受 Equalizer APO 的參數式 EQ 格式，也就是 AutoEQ `ParametricEQ.txt` 的格式：
+The import window accepts the Equalizer APO parametric EQ format, the same format as AutoEQ's `ParametricEQ.txt`:
 
 ```
-# 名稱: 樂團
+# Name: Band
 Preamp: -3.0 dB
 Filter 1: ON LSC Fc 90 Hz Gain 3.0 dB Q 0.71
 Filter 2: ON PK Fc 250 Hz Gain -1.5 dB Q 1.40
 Filter 3: ON HSC Fc 9000 Hz Gain 2.0 dB Q 0.71
 ```
 
-**耳機校正（AutoEQ）**：AutoEQ 依量測資料替數千款耳機算好了「把頻率響應拉平」的 EQ。
-到 [AutoEQ 的 results 資料夾](https://github.com/jaakkopasanen/AutoEq/tree/master/results)找到你的耳機型號，
-下載 `<型號> ParametricEQ.txt`，在匯入視窗按「選擇檔案…」。AutoEQ 提供的本來就是參數式 EQ，
-Tonefleur 會照原始數值套用，不需要轉換成固定頻段。
+**Headphone correction (AutoEQ):** AutoEQ has computed EQ curves that flatten the frequency response of thousands of headphones, based on measurements. Find your model in [AutoEQ's results folder](https://github.com/jaakkopasanen/AutoEq/tree/master/results), download `<model> ParametricEQ.txt`, and click **Choose File…** in the import window. AutoEQ results are already parametric, so Tonefleur applies the exact values without converting them to fixed bands.
 
-**請 AI 幫你調**：
+**Let an AI tune it:**
 
-1. 在匯入視窗按「**複製給 AI 的範本**」。範本已經寫好 Tonefleur 能接受的格式與數值範圍，
-   也會帶入目前的裝置名稱；如果你已經調過 EQ，也會附上目前的設定讓 AI 在這個基礎上修改。
-2. 貼給 ChatGPT、Claude 等 AI，把括號裡的內容改成你的播放裝置、常聽的音樂和想要的效果。
-3. 把 AI 的**整段回覆**貼回匯入視窗（或按「從剪貼簿貼上」）。Tonefleur 只讀取格式正確的那幾行，其他說明文字會自動略過。
-4. 確認預覽沒問題後，按「套用」或「套用並存為預設組」。
+1. Click **Copy AI Template** in the import window. The template already describes the format and value ranges Tonefleur accepts and includes the current device name; if you've already adjusted the EQ, your current settings are included as a starting point.
+2. Paste it into ChatGPT, Claude or another AI and fill in the bracketed parts: your playback device, the music you listen to, and the sound you want.
+3. Paste the AI's **entire reply** back into the import window (or click **Paste from Clipboard**). Tonefleur reads only the correctly formatted lines and ignores the rest.
+4. Check the preview, then click **Apply** or **Apply and Save as Preset**.
 
-匯入時超出範圍的數值會被調整到範圍內、不支援的濾波器類型會略過，預覽中都會列出。
-檔案裡寫的 Preamp 只供參考，匯入後前級增益一律由自動補償計算。
+Out-of-range values are clamped and unsupported filter types are skipped; the preview lists both. The file's Preamp is informational only: after import, preamp is always computed automatically.
 
-「複製目前的設定」會把目前的 EQ 轉成同樣的文字格式，可以分享給朋友，對方用同一個視窗匯入。
+**Copy Current Settings** exports the current EQ in the same text format, so you can share it with friends who import it the same way.
 
-## 運作原理
+## How it works
 
-### 整體流程
+### Overview
 
-Tonefleur 不安裝虛擬音訊裝置，而是用 macOS 14.2 起提供的 **Core Audio Process Tap** 攔截各 App 的聲音，
-處理後再從實體裝置播出：
+Tonefleur doesn't install a virtual audio device. It uses the **Core Audio Process Tap** API (available since macOS 14.2) to intercept each app's audio, processes it, and plays it on the physical device:
 
 ```mermaid
 flowchart TB
-    SRC["① 各 App 與系統音效<br/>照常播放到系統預設輸出"]
-    MON["AudioProcessMonitor<br/>判斷每個音訊 process<br/>屬於哪個 App"]
-    MIX["MixerController<br/>分配槽位<br/>套用音量、靜音、指定裝置"]
-    TAPS["② Process Tap × 13 個槽位<br/>攔截聲音，同時把原聲靜音<br/>槽位 1–12：各 App<br/>槽位 0：系統音效與其他"]
+    SRC["① Apps and system sounds<br/>play to the default output as usual"]
+    MON["AudioProcessMonitor<br/>works out which app<br/>each audio process belongs to"]
+    MIX["MixerController<br/>assigns slots<br/>applies volume, mute, routing"]
+    TAPS["② Process Tap × 13 slots<br/>capture audio and mute the original<br/>Slots 1–12: individual apps<br/>Slot 0: system sounds & others"]
 
     SRC --> TAPS
     MON -.-> MIX
-    MIX -.->|"改寫各 tap 攔截的對象"| TAPS
+    MIX -.->|"rewrite which processes each tap captures"| TAPS
 
-    subgraph RT["即時音訊執行緒（IOProc）"]
-        GAIN["③ 各槽位增益<br/>0–200%、靜音"]
-        SUM["④ 混合成立體聲"]
-        PRE["⑤ 前級增益<br/>依 EQ 曲線自動補償"]
-        EQ["⑥ 參數式 EQ<br/>最多 16 段 biquad"]
-        LIM["⑦ 預看式 Limiter<br/>峰值不超過 −1 dBFS"]
-        VOL["⑧ 主音量<br/>裝置沒有硬體音量時"]
+    subgraph RT["Real-time audio thread (IOProc)"]
+        GAIN["③ Per-slot gain<br/>0–200%, mute"]
+        SUM["④ Mix per channel"]
+        PRE["⑤ Preamp<br/>auto-compensated for the EQ curve"]
+        EQ["⑥ Parametric EQ<br/>up to 16 biquads"]
+        LIM["⑦ Lookahead limiter<br/>peaks ≤ −1 dBFS"]
+        VOL["⑧ Master volume<br/>when the device has no hardware volume"]
         GAIN --> SUM --> PRE --> EQ --> LIM --> VOL
     end
 
     TAPS --> GAIN
-    VOL --> OUT["🔊 實體輸出裝置"]
+    VOL --> OUT["🔊 Physical output device"]
 ```
 
-1. **攔截**：每個 tap 會攔截指定 process「送往某個輸出裝置」的聲音，並在讀取期間把原聲靜音。
-   Tonefleur 停止讀取（關閉、當掉）時，系統聲音會自動恢復原本的直接輸出，不會變成沒聲音。
-2. **槽位**：每條管線固定掛 13 個 tap。槽位 1–12 各給一個 App；槽位 0 用「排除模式」，
-   收所有沒有被分配的聲音，所以 EQ 仍然作用在全部聲音上。
-3. **處理**：建立一個 private aggregate device（子裝置是實體喇叭，tap 是它的輸入），
-   在它的 IOProc 裡依序做增益、混合、前級、EQ、Limiter、音量，再寫到喇叭。
-4. **動態調整**：App 開始或停止發聲時，只改寫 tap「攔截誰」，不需要重建裝置，聲音不會中斷。
+1. **Capture:** each tap captures what specific processes send to a specific output device, and mutes the original while it's being read. If Tonefleur stops reading (quits or crashes), macOS automatically resumes direct playback, so sound never goes silent.
+2. **Slots:** each pipeline has 13 fixed taps. Slots 1–12 each serve one app; slot 0 runs in *excluding* mode and captures everything not assigned elsewhere, so the EQ still applies to all audio.
+3. **Processing:** a private aggregate device (physical speaker as sub-device, taps as inputs) runs an IOProc that applies gain, mixing, preamp, EQ, limiter and volume, then writes to the speaker.
+4. **Live changes:** when apps start or stop playing, Tonefleur only rewrites *which processes* each tap captures. Nothing is rebuilt and audio isn't interrupted.
 
-### App 被指定到其他裝置時
+### Routing an app to another device
 
-App 永遠是往**系統預設輸出**播放的。把某個 App 指定到另一個裝置，做法是在那個裝置的管線裡
-攔截「這個 App 送往系統預設輸出」的聲音，再從那個裝置播出：
+Apps always play to the **system default output**. To send an app to another device, that device's pipeline taps "this app's audio going to the default output" and plays it on its own device:
 
 ```mermaid
 flowchart LR
-    A["App A<br/>跟隨系統預設"] --> DEF
-    B["App B<br/>指定到耳機"] --> DEF
-    DEF{{"兩者都送往<br/>系統預設輸出"}}
-    DEF -->|"主管線的 tap 攔截 A"| P1["主管線<br/>喇叭的 EQ"]
-    DEF -->|"次管線的 tap 攔截 B"| P2["次管線<br/>耳機的 EQ"]
-    P1 --> SPK["🔊 喇叭（系統預設）"]
-    P2 --> HP["🎧 耳機"]
+    A["App A<br/>follows system default"] --> DEF
+    B["App B<br/>assigned to headphones"] --> DEF
+    DEF{{"both play to the<br/>system default output"}}
+    DEF -->|"primary pipeline taps A"| P1["Primary pipeline<br/>speaker EQ"]
+    DEF -->|"secondary pipeline taps B"| P2["Secondary pipeline<br/>headphone EQ"]
+    P1 --> SPK["🔊 Speakers (system default)"]
+    P2 --> HP["🎧 Headphones"]
 ```
 
-- **主管線**接在系統預設輸出上，Tonefleur 啟用時一定存在。
-- **次管線**在有 App 被指定到其他裝置時才建立，沒有 App 用到時自動拆除。
-- 每條管線有自己的 EQ，這就是「每個裝置各自的 EQ」的由來。
-- App 在管線之間搬移時採「新的先接手、舊的再放掉」，寧可一瞬間重疊也不讓原聲漏出。
+- The **primary pipeline** sits on the system default output and always exists while Tonefleur is enabled.
+- **Secondary pipelines** are created when an app is assigned to another device and torn down when no app uses them.
+- Each pipeline has its own EQ, which is where per-device EQ comes from.
+- When an app moves between pipelines, the new one takes over before the old one lets go: a brief overlap is better than the original audio leaking out.
 
-### 為什麼不用虛擬音訊驅動
+### Why not a virtual audio driver
 
-| | 虛擬音訊驅動 | Core Audio Process Tap（Tonefleur） |
+| | Virtual audio driver | Core Audio Process Tap (Tonefleur) |
 |---|---|---|
-| 安裝 | 要用管理員權限安裝驅動、重啟音訊服務 | 不用安裝任何東西，只要允許錄音權限 |
-| 依 App 分離 | 驅動要自己辨識是哪個 App | API 本身就能指定 process |
-| 當掉時 | 系統輸出可能卡在虛擬裝置上，變成沒聲音 | 自動恢復原本的輸出 |
-| 系統音量鍵 | 控制的是虛擬裝置 | 仍然直接控制實體裝置 |
-| 缺點 | 維護成本高，系統更新容易壞 | 需要 macOS 14.2 以上；API 新、文件少 |
+| Installation | Admin install, restart the audio service | Nothing to install; just grant the recording permission |
+| Per-app separation | The driver must identify apps itself | The API targets processes directly |
+| On crash | Output can get stuck on the virtual device, leaving no sound | Original output resumes automatically |
+| System volume keys | Control the virtual device | Still control the physical device |
+| Downsides | High maintenance; OS updates break it | Requires macOS 14.2+; new API with sparse documentation |
 
-## 設計細節
+## Design details
 
 <details>
-<summary><b>判斷聲音屬於哪個 App</b></summary>
+<summary><b>Attributing audio to an app</b></summary>
 
-瀏覽器、Electron App 的聲音實際上是 helper process 發出的（例如 `Google Chrome Helper`、`com.apple.WebKit.GPU`）。
-判斷順序：
+Audio from browsers and Electron apps actually comes from helper processes (e.g. `Google Chrome Helper`, `com.apple.WebKit.GPU`). Tonefleur checks, in order:
 
-1. 音訊 process 自己
-2. 系統記錄的「負責的 process」（`responsibility_get_pid_responsible_for_pid`，非公開 API，以 `dlsym` 取得，取不到時略過）
-3. 往上找父 process
+1. The audio process itself
+2. The process the system records as "responsible" (`responsibility_get_pid_responsible_for_pid`, a private API loaded via `dlsym` and skipped if unavailable)
+3. Parent processes
 
-第一個是一般 App 的就是擁有者。包在別的 App 裡面的 helper（例如 `Discord.app/Contents/Frameworks/Discord Helper.app`）
-雖然系統也把它當成 App，但會繼續往上找到外層的主程式。
+The first one that is a regular app is the owner. Helpers nested inside another app (e.g. `Discord.app/Contents/Frameworks/Discord Helper.app`) look like apps to the system, so Tonefleur keeps walking up to the outermost app bundle.
 
-不用「bundle ID 是不是 `com.apple.*`」來排除系統程式，因為 Safari、音樂、Podcast 也都是 `com.apple.*`。
+It doesn't exclude system processes by checking for a `com.apple.*` bundle ID, because Safari, Music and Podcasts are `com.apple.*` too.
 
 </details>
 
 <details>
-<summary><b>混音器何時顯示一個 App</b></summary>
+<summary><b>When an app appears in the mixer</b></summary>
 
-- 正在發聲，或停止發聲 30 秒內（以灰色顯示，暫停時也能先調好音量）。
-- 音量、靜音或指定裝置被調整過的 App，只要還在使用音訊就一直顯示，也會預先佔好槽位，所以被靜音的 App 一開始發聲就不會漏音。
-- 設定依 bundle ID 記住，App 重開後沿用。
+- While it's playing, and for 30 seconds after it stops (shown grayed out, so you can adjust a paused app).
+- Apps whose volume, mute or routing you've changed stay visible as long as they use audio, and keep a slot reserved, so a muted app never leaks sound when it starts playing.
+- Settings are remembered by bundle ID across app restarts.
 
 </details>
 
 <details>
-<summary><b>即時執行緒</b></summary>
+<summary><b>Real-time thread</b></summary>
 
-IOProc 跑在即時音訊執行緒上，不能配置記憶體、不能等待鎖，否則會爆音：
+The IOProc runs on the real-time audio thread, where allocating memory or waiting on a lock causes dropouts:
 
-- 所有緩衝區與狀態在管線建立時就配置好，IOProc 只拿到指標，裡面沒有 ARC。
-- EQ 係數由 UI 執行緒計算，透過 `os_unfair_lock` 交接；即時端只用 `trylock`，搶不到就沿用舊參數，下一個緩衝區再試。
-- 係數、增益、音量的變動都在一個緩衝區內線性過渡，拖曳 EQ 或滑桿時不會有雜音。
-- 電平表的峰值由即時端寫入，只有控制面板開著時 UI 才讀取。
+- All buffers and state are allocated when the pipeline is built; the IOProc only receives raw pointers, with no ARC traffic.
+- EQ coefficients are computed on the UI thread and handed over with `os_unfair_lock`; the real-time side only uses `trylock` and keeps the old parameters if it can't get the lock, retrying on the next buffer.
+- Coefficient, gain and volume changes are ramped linearly across one buffer, so dragging EQ points or sliders doesn't click.
+- Meter peaks are written by the real-time side and only read by the UI while the panel is open.
 
 </details>
 
 <details>
 <summary><b>Limiter</b></summary>
 
-預看式峰值限幅器，左右聲道連動：訊號延遲約 0.67 ms，增益在峰值抵達之前就線性降到位，
-釋放時間常數約 120 ms。演算法保證輸出不超過 −1 dBFS（有單元測試驗證），不需要另外的軟削波。
+A lookahead peak limiter linked across channels: the signal is delayed by about 0.67 ms so gain can ramp down linearly before a peak arrives, with a release time constant of about 120 ms. The algorithm guarantees output never exceeds −1 dBFS (verified by unit tests), so no extra soft clipper is needed.
 
 </details>
 
 <details>
-<summary><b>安全機制</b></summary>
+<summary><b>Safety mechanisms</b></summary>
 
-- **只攔截送往特定裝置的聲音**：不使用全域 tap。若系統裡有其他音訊轉送工具（虛擬裝置 → 實體喇叭），
-  全域 tap 會把它轉送的聲音再抓一次、送回去，形成回授。
-- **回授保護**：任何一個 tap 的原始訊號超過 +12 dBFS 或出現 NaN，即時端立刻改輸出靜音，引擎隨後停用並在介面說明原因。
-- **沒有音訊流動**：管線啟動 20 秒內都沒有收到音訊（多半是還沒允許錄音權限），會顯示原因並每 5 秒自動重試。
-- **休眠與喚醒**：休眠前主動拆除管線，喚醒約 1 秒後重建，失敗時以 1、2、4 秒的間隔重試。
+- **Device-scoped taps only:** no global taps. If another audio forwarding tool is running (virtual device → physical speaker), a global tap would capture its forwarded audio again and send it back, creating feedback.
+- **Feedback protection:** if any tap's raw signal exceeds +12 dBFS or contains NaN, the real-time side outputs silence immediately; the engine then shuts down and the UI explains why.
+- **No audio flowing:** if a pipeline receives no audio within 20 seconds of starting (usually because the recording permission hasn't been granted), the UI shows why and retries every 5 seconds.
+- **Sleep and wake:** pipelines are torn down before sleep and rebuilt about 1 second after wake, retrying at 1, 2 and 4 second intervals on failure.
 
 </details>
 
 <details>
-<summary><b>聲道（立體聲、5.1、7.1）</b></summary>
+<summary><b>Channels (stereo, 5.1, 7.1)</b></summary>
 
-管線的聲道數等於輸出裝置的聲道數。tap 攔截到的格式和裝置相同，所以每個聲道照原位置混合、處理、送出，不做降混：
-5.1 裝置上，中置（對白）、重低音、環繞聲道都保持在原本的位置。
+A pipeline has as many channels as its output device. Taps deliver audio in the device's format, so every channel is mixed, processed and output in place, with no downmixing: on a 5.1 device, center (dialogue), LFE and surround channels stay where they belong.
 
-- **EQ**：同一組參數套用到每個聲道，各聲道有自己的濾波器狀態。
-- **Limiter**：同時看所有聲道，任何一個聲道太大聲時全部一起壓低，各聲道的比例不變，空間感不會偏移。
-- **平衡**：依裝置回報的聲道配置，偏左時衰減右側的聲道（右前、右環繞……），中置與重低音不受影響。
-  裝置回報的配置不完整時，立體聲視為左右，6／8 聲道視為標準的 5.1／7.1 排列。
-- **頻譜**：顯示所有聲道的平均。
+- **EQ:** the same settings apply to every channel, each with its own filter state.
+- **Limiter:** looks at all channels together; if any channel is too loud, all are reduced together, preserving the balance between them and the spatial image.
+- **Balance:** uses the device's reported channel layout. Panning left attenuates right-side channels (front right, surround right…); center and LFE are unaffected. If the reported layout is incomplete, stereo is treated as L/R and 6/8 channels as standard 5.1/7.1.
+- **Spectrum:** shows the average across all channels.
 
-裝置是立體聲時，播放 5.1 內容的 App 或 macOS 會先自行降混再送出，這一步發生在 Tonefleur 之前，與是否使用 Tonefleur 無關。
+On a stereo device, apps or macOS downmix 5.1 content before it's sent out. That happens before Tonefleur and is unrelated to it.
 
 </details>
 
-## 已知限制
+## Known limitations
 
-- 支援多聲道輸出裝置（5.1、7.1 等，最多 16 聲道），但目前只用模擬的 5.1 裝置做過測試，還沒有在實際的環繞音響上驗證。
-- 播放器把 Dolby Digital、DTS、Atmos 等**原始編碼資料直接傳給擴大機**（passthrough）時，那是壓縮過的資料而不是聲音波形，
-  Tonefleur 無法處理，任何系統等化器都一樣。
-- 同時最多 12 個 App 有自己的一列，超過的會併入「系統音效與其他」。
-- 每條管線有 13 個 tap，同時使用的輸出裝置越多，系統音訊服務（`coreaudiod`）的負擔越大。
-- 被指定的裝置若沒有硬體音量，只有在它是系統預設輸出時才能調它的主音量（指定過去的 App 可以用自己那一列的滑桿調）。
-- 次管線啟動後若一直沒有音訊流動，不會自動重試（主管線會）；此時該 App 的聲音會留在系統預設輸出。
-- 部分 HDMI 裝置的管線啟動時間不穩定（從不到 1 秒到 20 秒以上都有），目前靠自動重試恢復，原因未查明。
-- 少數專業錄音介面把聲道分在多個串流上，目前只處理第一個串流。
-- 與其他會攔截或轉送系統聲音的工具（其他系統等化器、音訊路由工具）同時使用沒有意義，建議擇一。
-- 左右平衡在 Tonefleur 的管線裡處理，音訊處理關閉時不會作用。
+- Multichannel output devices (5.1, 7.1, up to 16 channels) are supported but have only been tested with a simulated 5.1 device, not real surround hardware yet.
+- When a player sends Dolby Digital, DTS or Atmos **bitstream to a receiver** (passthrough), the data is compressed, not a waveform. Tonefleur can't process it; no system EQ can.
+- Up to 12 apps get their own row at a time; the rest go into "System sounds & others".
+- Each pipeline uses 13 taps; the more output devices in use at once, the more load on the system audio service (`coreaudiod`).
+- An assigned device without hardware volume only gets master volume control when it's the system default (apps routed to it can still use their own sliders).
+- Secondary pipelines don't auto-retry if no audio flows after starting (the primary pipeline does); the app's audio stays on the system default output.
+- Some HDMI devices take an inconsistent amount of time to start a pipeline (from under 1 second to over 20). Automatic retry handles it for now; the root cause is unknown.
+- A few pro audio interfaces split channels across multiple streams; only the first stream is handled.
+- Running alongside other tools that capture or forward system audio (other system EQs, audio routers) makes no sense; pick one.
+- Balance is applied in Tonefleur's pipeline, so it has no effect when processing is off.
 
-## 開發
+## Development
 
-### 專案結構
+### Project layout
 
 ```
 Tonefleur/
 ├── Package.swift
 ├── Sources/
-│   ├── AudioCore/                 # 不依賴 UI 的音訊核心
-│   │   ├── HAL/                   # Core Audio 屬性存取的薄包裝
-│   │   ├── Devices/               # 輸出裝置列舉、切換、主音量、軟體音量
-│   │   ├── Processes/             # 音訊 process 列舉與 App 歸屬判定
+│   ├── AudioCore/                 # Audio core, independent of the UI
+│   │   ├── HAL/                   # Thin wrappers over Core Audio properties
+│   │   ├── Devices/               # Output device listing, switching, master and software volume
+│   │   ├── Processes/             # Audio process listing and app attribution
 │   │   ├── Tap/                   # Process Tap
-│   │   ├── Pipeline/              # OutputPipeline：單一輸出裝置的 aggregate device、IOProc、即時處理
-│   │   ├── DSP/                   # Biquad、參數式 EQ、Limiter、EQ 設定與預設組、匯入匯出格式
-│   │   ├── Mixer/                 # MixerController：槽位分配、各 App 音量與指定裝置
-│   │   └── Engine/                # AudioEngine：管理多條管線與路由
-│   └── App/                       # SwiftUI：選單列面板、混音器、EQ 編輯器、自動更新
-├── Tests/AudioCoreTests/          # DSP、匯入格式與歸屬判定的單元測試
-├── Resources/                     # Info.plist、App 圖示、en.lproj／zh-Hant.lproj 翻譯
-├── LICENSE                        # MIT 授權
-└── Scripts/                       # 建置、打包、簽章、圖示
+│   │   ├── Pipeline/              # OutputPipeline: aggregate device, IOProc, real-time processing per output
+│   │   ├── DSP/                   # Biquad, parametric EQ, limiter, EQ settings and presets, import/export
+│   │   ├── Mixer/                 # MixerController: slot allocation, per-app volume and routing
+│   │   └── Engine/                # AudioEngine: manages pipelines and routing
+│   └── App/                       # SwiftUI: menu bar panel, mixer, EQ editor, auto-update
+├── Tests/AudioCoreTests/          # Unit tests for DSP, import format and attribution
+├── Resources/                     # Info.plist, app icon, en.lproj / zh-Hant.lproj translations
+├── LICENSE                        # MIT License
+└── Scripts/                       # Build, packaging, signing, icon
 ```
 
-### 腳本
+### Scripts
 
-| 指令 | 用途 |
+| Command | Purpose |
 |---|---|
-| `./Scripts/bundle.sh [release\|debug]` | 建置並組裝 `build/Tonefleur.app`。release 為 Apple 晶片＋Intel 的 universal 版本 |
-| `./Scripts/install.sh` | 建置、安裝到 `/Applications` 並啟動 |
-| `./Scripts/make-dmg.sh` | 打包成 `build/Tonefleur-<版本>.dmg` |
-| `./Scripts/set-version.sh <版本號>` | 設定版本號，並把建置編號加一 |
-| `./Scripts/setup-updates.sh` | 建立自動更新用的簽章金鑰（只需執行一次） |
-| `./Scripts/release.sh` | 打包、替更新檔簽章，並更新 `appcast.xml` |
-| `python3 Scripts/check-localization.py` | 檢查介面文字有沒有漏翻成英文 |
-| `./Scripts/create-signing-cert.sh` | 在登入鑰匙圈建立自簽的程式碼簽章憑證 `SoundDeck Dev` |
-| `./Scripts/make-icon.sh` | 由 `make-icon.swift` 重新產生 App 圖示 |
-| `swift test` | 執行單元測試 |
+| `./Scripts/bundle.sh [release\|debug]` | Build and assemble `build/Tonefleur.app`. Release builds are universal (Apple silicon + Intel) |
+| `./Scripts/install.sh` | Build, install to `/Applications` and launch |
+| `./Scripts/make-dmg.sh` | Package `build/Tonefleur-<version>.dmg` |
+| `./Scripts/set-version.sh <version>` | Set the version and bump the build number |
+| `./Scripts/setup-updates.sh` | Create the auto-update signing key (run once) |
+| `./Scripts/release.sh` | Package, sign the update and update `appcast.xml` |
+| `python3 Scripts/check-localization.py` | Check for UI strings missing an English translation |
+| `./Scripts/create-signing-cert.sh` | Create a self-signed code signing certificate `SoundDeck Dev` in the login keychain |
+| `./Scripts/make-icon.sh` | Regenerate the app icon from `make-icon.swift` |
+| `swift test` | Run unit tests |
 
-### 簽章與錄音權限
+### Signing and the recording permission
 
-macOS 的錄音權限綁定程式簽章。沒有憑證時 `bundle.sh` 會用 ad-hoc 簽章，每次建置的簽章都不同，
-所以**每次重新建置後都要重新允許一次**。先執行一次：
+macOS ties the recording permission to the code signature. Without a certificate, `bundle.sh` signs ad hoc, which produces a different signature on every build, so **you have to grant the permission again after every rebuild**. Run this once:
 
 ```bash
 ./Scripts/create-signing-cert.sh
 ```
 
-它會建立一張只在本機有效、只信任於「程式碼簽章」用途的自簽憑證（過程中系統會要求輸入登入密碼），
-之後 `bundle.sh` 會自動使用它。也可以用環境變數 `TONEFLEUR_SIGN_IDENTITY` 指定其他憑證。
+It creates a local self-signed certificate trusted only for code signing (macOS will ask for your login password), and `bundle.sh` uses it automatically from then on. Set `TONEFLEUR_SIGN_IDENTITY` to use a different certificate.
 
-### 自動更新的運作方式
+### How auto-update works
 
-使用 [Sparkle](https://sparkle-project.org)。App 每天檢查一次 repo 裡的 `appcast.xml`，
-裡面列出各版本的版本號與 dmg 下載網址（GitHub Releases）。每個 dmg 都用 EdDSA 私鑰簽章，
-App 內建對應的公鑰（`Info.plist` 的 `SUPublicEDKey`），簽章不符的更新會被拒絕。
+Tonefleur uses [Sparkle](https://sparkle-project.org). Once a day the app checks `appcast.xml` in this repo, which lists each version's number and DMG download URL (on GitHub Releases). Every DMG is signed with an EdDSA private key, and the app embeds the matching public key (`SUPublicEDKey` in `Info.plist`); updates with a bad signature are rejected.
 
-第一次發佈前，先在這台電腦執行一次：
+Before your first release, run this once on your machine:
 
 ```bash
 ./Scripts/setup-updates.sh
 ```
 
-它會在登入鑰匙圈建立私鑰，並把公鑰寫進 `Info.plist`。**私鑰遺失就無法再推送更新給已安裝的人**，
-請依腳本最後的提示把私鑰匯出備份（不要放進 repo）。沒有設定公鑰的版本（例如別人自己建置的）
-不會啟用自動更新，也不會顯示「檢查更新…」。
+It creates the private key in the login keychain and writes the public key into `Info.plist`. **If the private key is lost, you can no longer ship updates to existing installs**, so export a backup as the script instructs (never into the repo). Builds without a public key (e.g. someone else's build) don't enable auto-update or show **Check for Updates…**.
 
-`appcast.xml` 的網址預設是 `kawaisumi/Tonefleur` 這個 repo；repo 名稱不同時，
-要同時修改 `Info.plist` 的 `SUFeedURL` 與執行 `release.sh` 時的環境變數 `TONEFLEUR_GITHUB_REPO`。
+`appcast.xml` points to the `kawaisumi/Tonefleur` repo by default. For a different repo, change `SUFeedURL` in `Info.plist` and set `TONEFLEUR_GITHUB_REPO` when running `release.sh`.
 
-### 發佈新版本
+### Releasing a new version
 
-1. 設定版本號：`./Scripts/set-version.sh 1.1.0`。版本號採「主版本.次版本.修正版本」：
-   修正 bug 加最後一碼（1.0.0 → 1.0.1），新增功能加中間一碼（1.0.1 → 1.1.0）。腳本也會把內部建置編號加一。
-2. 執行 `./Scripts/release.sh`：打包 dmg、替它簽章、在 `appcast.xml` 加上這個版本，最後列出校驗碼。
-3. 依腳本列出的順序完成：commit 並打 tag → 推送 tag → 在 GitHub 建立 Release 並上傳 dmg →
-   最後才推送 `main`。順序很重要：`appcast.xml` 一推上去，已安裝的人就會收到通知，
-   這時 dmg 必須已經可以下載。
+1. Set the version: `./Scripts/set-version.sh 1.1.0`. Versions are major.minor.patch: bump the last number for bug fixes (1.0.0 → 1.0.1) and the middle one for new features (1.0.1 → 1.1.0). The script also bumps the build number.
+2. Run `./Scripts/release.sh`: it packages the DMG, signs it, adds the version to `appcast.xml` and prints the checksum.
+3. Follow the steps it prints, in order: commit and tag → push the tag → create the GitHub release and upload the DMG → push `main` last. The order matters: as soon as `appcast.xml` is pushed, existing users get notified, so the DMG must already be downloadable.
 
-目前的版本號顯示在控制面板右下角「結束」按鈕的左邊；滑鼠停在上面會顯示建置編號。
+The current version is shown at the bottom right of the panel, left of **Quit**; hover over it to see the build number.
 
-請一直用**同一張憑證**簽章發佈的版本。換了憑證，已安裝的使用者更新後要重新允許錄音權限。
-建議從「鑰匙圈存取」把 `SoundDeck Dev` 匯出成 `.p12` 備份起來（不要放進 repo）。
+Always sign releases with the **same certificate**. If it changes, users have to grant the recording permission again after updating. Export `SoundDeck Dev` from Keychain Access as a `.p12` backup (never into the repo).
 
-### 診斷
+### Diagnostics
 
 ```bash
-# 每 2 秒記錄各管線、各 App 的電平
+# Log levels per pipeline and per app every 2 seconds
 open build/Tonefleur.app --args --log-stats
 /usr/bin/log stream --predicate 'subsystem == "local.sounddeck.app"' --style compact
 
-# 列出偵測到的輸出裝置／混音器會顯示的 App，然後結束
+# Print detected output devices / apps the mixer would show, then exit
 ./build/Tonefleur.app/Contents/MacOS/Tonefleur --dump-devices
 ./build/Tonefleur.app/Contents/MacOS/Tonefleur --dump-apps
 
-# 把選單列面板與 EQ 編輯器開成一般視窗，並在 4 秒後存成 PNG（可加 -AppleLanguages "(en)" 檢查英文版）
-open build/Tonefleur.app --args --preview --preview-snapshot <資料夾>
+# Open the panel and EQ editor as regular windows and save PNGs after 4 seconds
+# (add -AppleLanguages "(en)" to check the English UI)
+open build/Tonefleur.app --args --preview --preview-snapshot <folder>
 
-# 啟動 8 秒後把指定 App 送到指定裝置，10 秒後還原
-open build/Tonefleur.app --args --log-stats --route-test <App 的 bundle ID> <裝置名稱>
+# 8 seconds after launch, route an app to a device; restore after 10 seconds
+open build/Tonefleur.app --args --log-stats --route-test <bundle ID> <device name>
 ```
 
-## 開發紀錄
+## Development history
 
-| 階段 | 內容 |
+| Milestone | Scope |
 |---|---|
-| M0 | 概念驗證：Process Tap + aggregate device 轉送系統聲音、回授保護 |
-| M1 | 輸出裝置管理、軟體音量、休眠喚醒、啟動失敗自動重試 |
-| M2 | 參數式 EQ、預看式 Limiter、EQ 編輯器、內建預設組 |
-| M3 | App 混音器：固定 13 個 tap 槽位、helper process 歸屬判定 |
-| M4 | 依 App 指定輸出裝置、多條管線、每個裝置各自的 EQ |
-| M5 | 自訂預設組、開機自動啟動、介面整理、App 圖示、dmg 打包 |
-| M6 | 匯入 AutoEQ／Equalizer APO 格式、給 AI 的參數範本、匯出目前設定 |
-| M7 | 左右聲道平衡、自動更新（Sparkle）、頻譜分析儀、英文介面 |
-| M8 | 多聲道輸出（5.1、7.1 等）：每個聲道照原位置處理，不再只保留前方左右 |
+| M0 | Proof of concept: Process Tap + aggregate device forwarding system audio, feedback protection |
+| M1 | Output device management, software volume, sleep/wake, automatic retry on startup failure |
+| M2 | Parametric EQ, lookahead limiter, EQ editor, built-in presets |
+| M3 | App mixer: 13 fixed tap slots, helper process attribution |
+| M4 | Per-app output routing, multiple pipelines, per-device EQ |
+| M5 | Custom presets, launch at login, UI polish, app icon, DMG packaging |
+| M6 | AutoEQ / Equalizer APO import, AI parameter template, export current settings |
+| M7 | Balance, auto-update (Sparkle), spectrum analyzer, English UI |
+| M8 | Multichannel output (5.1, 7.1, etc.): every channel processed in place instead of keeping only front L/R |
 
-### 之後可能做的
+### Possible future work
 
-- 全域快捷鍵（切換裝置、開關 EQ、切換預設組）
-- App 內直接搜尋 AutoEQ 耳機（目前要先到網站下載檔案）
-- 輸入裝置（麥克風）的選擇與音量
-- 依 App 獨立的 EQ
-- 圖形式 EQ（固定 10 段的簡易介面）
+- Global hotkeys (switch device, toggle EQ, switch preset)
+- Search AutoEQ headphones inside the app (currently you download the file from the site)
+- Input device (microphone) selection and volume
+- Per-app EQ
+- Graphic EQ (a simple fixed 10-band interface)
 
-## 參考資料與致謝
+## References and acknowledgments
 
-- [Sparkle](https://sparkle-project.org)：自動更新（MIT 授權，授權全文附在 App 內的 `Contents/Resources/Licenses/`）
-- [AutoEQ](https://github.com/jaakkopasanen/AutoEq)：耳機校正資料的格式
-- [Audio EQ Cookbook](https://webaudio.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html)（Robert Bristow-Johnson）：biquad 濾波器係數公式
-- Apple Core Audio：`AudioHardwareCreateProcessTap`、`CATapDescription`（見 SDK 中的 `AudioHardwareTapping.h`、`CATapDescription.h`）
+- [Sparkle](https://sparkle-project.org): auto-update (MIT License; full license text included in the app at `Contents/Resources/Licenses/`)
+- [AutoEQ](https://github.com/jaakkopasanen/AutoEq): headphone correction data format
+- [Audio EQ Cookbook](https://webaudio.github.io/Audio-EQ-Cookbook/audio-eq-cookbook.html) (Robert Bristow-Johnson): biquad filter coefficient formulas
+- Apple Core Audio: `AudioHardwareCreateProcessTap`, `CATapDescription` (see `AudioHardwareTapping.h` and `CATapDescription.h` in the SDK)
 
-## 授權
+## License
 
-[MIT License](LICENSE)。可以自由使用、修改與散布，包含商業用途，只要保留原本的版權與授權聲明。
-本軟體按現狀提供，不提供任何擔保。
+[MIT License](LICENSE). Free to use, modify and distribute, including commercially, as long as the copyright and license notice are kept. Provided as is, without warranty.
